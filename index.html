@@ -5,6 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>Straż Alert Live</title>
   <meta name="theme-color" content="#090a0f">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/lucide@latest"></script>
@@ -12,45 +16,56 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+  
   <style>
     :root { --font-sans: 'Inter', sans-serif; --font-tech: 'Chakra Petch', sans-serif; --font-mono: 'JetBrains Mono', monospace; }
-    body { font-family: var(--font-sans); background-color: #06070a; color: #f1f5f9; overflow: hidden; height: 100vh; width: 100vw; -webkit-tap-highlight-color: transparent; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background-color: #090a0f; color: #f1f5f9; font-family: var(--font-sans); -webkit-tap-highlight-color: transparent; }
     .font-tech { font-family: var(--font-tech); }
     .font-mono { font-family: var(--font-mono); }
-    #map { height: 100vh; width: 100vw; z-index: 10; background: #07090e; }
-    .straz-popup .leaflet-popup-content-wrapper { background: rgba(13, 16, 23, 0.96) !important; color: #f8fafc !important; border: 1px solid rgba(239, 68, 68, 0.4) !important; border-radius: 16px !important; box-shadow: 0 20px 35px -10px rgba(0, 0, 0, 0.8), 0 0 25px rgba(239, 68, 68, 0.25) !important; backdrop-filter: blur(12px); padding: 4px; }
-    .straz-popup .leaflet-popup-tip { background: rgba(13, 16, 23, 0.96) !important; border: 1px solid rgba(239, 68, 68, 0.4) !important; }
-    .custom-scrollbar::-webkit-scrollbar { width: 5px; }
+    
+    #map { position: absolute; top: 0; left: 0; right: 0; bottom: 0; width: 100%; height: 100%; z-index: 10; background: #e2e8f0; }
+    
+    /* Styl dymków na mapie */
+    .straz-popup .leaflet-popup-content-wrapper { background: rgba(15, 23, 42, 0.96) !important; color: #f8fafc !important; border: 1px solid rgba(239, 68, 68, 0.5) !important; border-radius: 16px !important; box-shadow: 0 20px 35px -10px rgba(0, 0, 0, 0.7) !important; backdrop-filter: blur(12px); padding: 4px; }
+    .straz-popup .leaflet-popup-tip { background: rgba(15, 23, 42, 0.96) !important; }
+    .leaflet-container a.leaflet-popup-close-button { color: #94a3b8 !important; padding: 6px 8px 0 0 !important; }
+    
+    .custom-scrollbar::-webkit-scrollbar { width: 5px; height: 5px; }
     .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
     .custom-scrollbar::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
+    
     .pulse-ring { position: absolute; border-radius: 50%; animation: pulsate 2s infinite ease-out; opacity: 0; }
-    @keyframes pulsate { 0% { transform: scale(0.6); opacity: 0.9; } 50% { opacity: 0.4; } 100% { transform: scale(2.4); opacity: 0; } }
-    .status-badge-fire { background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.4); color: #f87171; }
-    .status-badge-accident { background: rgba(245, 158, 11, 0.15); border: 1px solid rgba(245, 158, 11, 0.4); color: #fbbf24; }
-    .status-badge-hazard { background: rgba(14, 165, 233, 0.15); border: 1px solid rgba(14, 165, 233, 0.4); color: #38bdf8; }
+    @keyframes pulsate { 0% { transform: scale(0.6); opacity: 0.9; } 50% { opacity: 0.4; } 100% { transform: scale(2.5); opacity: 0; } }
+    
+    .status-badge-fire { background: rgba(239, 68, 68, 0.18); border: 1px solid rgba(239, 68, 68, 0.5); color: #f87171; }
+    .status-badge-accident { background: rgba(245, 158, 11, 0.18); border: 1px solid rgba(245, 158, 11, 0.5); color: #fbbf24; }
+    .status-badge-hazard { background: rgba(14, 165, 233, 0.18); border: 1px solid rgba(14, 165, 233, 0.5); color: #38bdf8; }
+    
+    .filter-pill.active { background-color: #ef4444; color: #ffffff; border-color: #f87171; box-shadow: 0 4px 12px rgba(239, 68, 68, 0.35); }
   </style>
 </head>
 <body class="relative select-none">
 
-  <!-- ALERT TOAST Z GÓRY EKRANU -->
-  <div id="toast-alert" style="display: none; z-index: 999999;" class="fixed top-3 left-3 right-3 max-w-md mx-auto bg-slate-900/95 border-2 border-red-500/80 rounded-2xl p-3.5 shadow-2xl backdrop-blur-xl transition-all duration-300">
+  <!-- POWIADOMIENIE TOAST Z GÓRY EKRANU -->
+  <div id="toast-alert" style="display: none; z-index: 999999;" class="fixed top-3 left-3 right-3 max-w-md mx-auto bg-slate-900/95 border-2 border-red-500 rounded-2xl p-3.5 shadow-2xl backdrop-blur-xl transition-all duration-300">
     <div class="flex items-start gap-3 cursor-pointer" id="toast-click-area">
       <div class="relative flex-shrink-0 mt-0.5">
         <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-        <div class="relative inline-flex rounded-full h-8 w-8 bg-red-600 items-center justify-center text-white shadow-lg shadow-red-600/50">
-          <i data-lucide="siren" class="w-4 h-4 animate-bounce"></i>
+        <div class="relative inline-flex rounded-full h-9 w-9 bg-red-600 items-center justify-center text-white shadow-lg shadow-red-600/50">
+          <i data-lucide="siren" class="w-5 h-5 animate-bounce"></i>
         </div>
       </div>
       <div class="flex-1 min-w-0">
         <div class="flex items-center gap-2">
-          <span class="text-[11px] font-mono uppercase tracking-wider font-bold text-red-400">NOWY MELDUNEK NA ŻYWO</span>
+          <span class="text-[11px] font-mono uppercase tracking-wider font-bold text-red-400">ALARM • NOWE ZDARZENIE</span>
           <span class="text-[10px] text-slate-400 font-mono" id="toast-time"></span>
         </div>
         <h4 id="toast-title" class="text-sm font-bold text-white truncate font-tech mt-0.5"></h4>
         <p id="toast-desc" class="text-xs text-slate-300 line-clamp-1 mt-0.5"></p>
         <div class="mt-1 flex items-center gap-1.5 text-[10px] text-amber-400 font-medium">
           <i data-lucide="navigation" class="w-3 h-3"></i>
-          <span>Kliknij, aby przejść do miejsca na mapie</span>
+          <span>Dotknij, aby pokazać na mapie</span>
         </div>
       </div>
       <button id="toast-close" class="text-slate-400 hover:text-white p-1">
@@ -59,64 +74,134 @@
     </div>
   </div>
 
-  <!-- GÓRNY PASEK APLIKACJI -->
-  <header style="z-index: 40;" class="fixed top-0 left-0 right-0 h-16 bg-slate-950/85 backdrop-blur-md border-b border-slate-800/80 px-4 flex items-center justify-between pointer-events-auto">
-    <div class="flex items-center gap-2.5">
-      <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-red-500 to-amber-600 flex items-center justify-center shadow-lg shadow-red-500/20 border border-red-400/30">
-        <i data-lucide="flame" class="w-6 h-6 text-white"></i>
-      </div>
-      <div>
-        <div class="flex items-center gap-1.5">
-          <span class="font-tech text-lg font-bold tracking-wider text-white">STRAŻ ALERT</span>
-          <span class="px-1.5 py-0.2 text-[9px] font-mono font-bold bg-red-500/20 text-red-400 border border-red-500/40 rounded">LIVE</span>
+  <!-- GÓRNY PANEL: NAGŁÓWEK + WYSZUKIWARKA + FILTRY -->
+  <div style="z-index: 40;" class="fixed top-0 left-0 right-0 pointer-events-none flex flex-col">
+    
+    <!-- Pasek tytułowy -->
+    <header class="h-14 bg-slate-950/90 backdrop-blur-md border-b border-slate-800/80 px-3.5 flex items-center justify-between pointer-events-auto shadow-lg">
+      <div class="flex items-center gap-2.5">
+        <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-red-600 to-amber-600 flex items-center justify-center shadow-md shadow-red-600/30 border border-red-400/40">
+          <i data-lucide="flame" class="w-5 h-5 text-white"></i>
         </div>
-        <p class="text-[10px] text-slate-400 font-mono tracking-tight flex items-center gap-1">
-          <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> SYSTEM 24/7 • PSP & OSP
-        </p>
+        <div>
+          <div class="flex items-center gap-1.5">
+            <span class="font-tech text-base font-bold tracking-wider text-white">STRAŻ ALERT</span>
+            <span class="px-1.5 py-0.2 text-[9px] font-mono font-bold bg-red-500/20 text-red-400 border border-red-500/40 rounded">LIVE</span>
+          </div>
+          <p class="text-[10px] text-slate-400 font-mono tracking-tight flex items-center gap-1">
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> MONITORING POLSKA 24/7
+          </p>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-1.5">
+        <button id="btn-sound-toggle" title="Dźwięk syreny" class="h-9 w-9 rounded-xl bg-slate-900 border border-slate-700/80 text-emerald-400 flex items-center justify-center active:scale-95 transition-all">
+          <i data-lucide="volume-2" class="w-4 h-4" id="sound-icon"></i>
+        </button>
+        <button id="btn-refresh" title="Odśwież bazę" class="h-9 w-9 rounded-xl bg-slate-900 border border-slate-700/80 text-slate-300 flex items-center justify-center active:scale-95 transition-all">
+          <i data-lucide="refresh-cw" class="w-4 h-4" id="refresh-icon"></i>
+        </button>
+        <button id="btn-toggle-incidents" class="h-9 px-3 rounded-xl bg-slate-900 border border-slate-700/80 text-slate-100 text-xs font-medium flex items-center gap-1.5 active:scale-95 transition-all">
+          <i data-lucide="list" class="w-4 h-4 text-red-400"></i>
+          <span id="header-counter" class="bg-red-500/20 text-red-400 font-mono text-[11px] px-1.5 py-0.5 rounded-full font-bold">0</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- Pasek wyszukiwania i filtrów -->
+    <div class="px-3 pt-2.5 pb-2 bg-gradient-to-b from-slate-950/85 via-slate-950/60 to-transparent pointer-events-auto">
+      <div class="max-w-xl mx-auto space-y-2">
+        <!-- Wyszukiwarka + Kalendarz -->
+        <div class="flex gap-2">
+          <div class="relative flex-1">
+            <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2"></i>
+            <input id="search-input" type="text" placeholder="Szukaj miejscowości, ulicy, DK/A1, jednostki..." 
+              class="w-full h-10 pl-9 pr-8 rounded-xl bg-slate-900/95 border border-slate-700/90 text-xs text-white placeholder-slate-400 focus:outline-none focus:border-red-500 shadow-lg" />
+            <button id="clear-search" style="display:none;" class="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white">
+              <i data-lucide="x" class="w-3.5 h-3.5"></i>
+            </button>
+          </div>
+          <input id="date-filter" type="date" title="Filtruj po dacie"
+            class="h-10 px-2.5 rounded-xl bg-slate-900/95 border border-slate-700/90 text-xs text-slate-200 font-mono focus:outline-none focus:border-red-500 shadow-lg w-[125px]" />
+        </div>
+
+        <!-- Kafelki kategorii -->
+        <div class="flex items-center gap-1.5 overflow-x-auto custom-scrollbar pb-1">
+          <button data-cat="all" class="filter-pill active px-3 py-1.5 rounded-xl bg-slate-900/90 border border-slate-700/80 text-slate-200 text-xs font-tech font-bold whitespace-nowrap transition-all flex items-center gap-1.5 shadow">
+            <span>Wszystkie</span>
+            <span id="count-all" class="text-[10px] font-mono opacity-80">(0)</span>
+          </button>
+          <button data-cat="fire" class="filter-pill px-3 py-1.5 rounded-xl bg-slate-900/90 border border-slate-700/80 text-slate-200 text-xs font-tech font-bold whitespace-nowrap transition-all flex items-center gap-1.5 shadow">
+            <span>🔥 Pożary</span>
+            <span id="count-fire" class="text-[10px] font-mono opacity-80">(0)</span>
+          </button>
+          <button data-cat="accident" class="filter-pill px-3 py-1.5 rounded-xl bg-slate-900/90 border border-slate-700/80 text-slate-200 text-xs font-tech font-bold whitespace-nowrap transition-all flex items-center gap-1.5 shadow">
+            <span>🚗 Wypadki</span>
+            <span id="count-accident" class="text-[10px] font-mono opacity-80">(0)</span>
+          </button>
+          <button data-cat="hazard" class="filter-pill px-3 py-1.5 rounded-xl bg-slate-900/90 border border-slate-700/80 text-slate-200 text-xs font-tech font-bold whitespace-nowrap transition-all flex items-center gap-1.5 shadow">
+            <span>⚠️ Zagrożenia (MZ)</span>
+            <span id="count-hazard" class="text-[10px] font-mono opacity-80">(0)</span>
+          </button>
+        </div>
       </div>
     </div>
-    <div class="flex items-center gap-2">
-      <button id="btn-toggle-incidents" class="h-9 px-3 rounded-xl bg-slate-900 border border-slate-700/70 text-slate-200 text-xs font-medium flex items-center gap-1.5 active:scale-95 transition-all">
-        <i data-lucide="list" class="w-4 h-4 text-red-400"></i>
-        <span id="header-counter" class="bg-red-500/20 text-red-400 font-mono text-[10px] px-1.5 py-0.5 rounded-full font-bold">0</span>
-      </button>
-    </div>
-  </header>
+  </div>
 
-  <!-- MAPA GŁÓWNA -->
+  <!-- GŁÓWNA MAPA POLSKI -->
   <div id="map"></div>
 
+  <!-- BOCZNE PRZYCISKI NA MAPIE (GPS, Zmiana mapy, Cała Polska, Dodaj zgłoszenie) -->
+  <div style="z-index: 35;" class="fixed right-3 bottom-20 flex flex-col gap-2.5 pointer-events-auto">
+    <button id="btn-map-style" title="Zmień wygląd mapy (Drogowa / Satelita / Nocna)" class="w-11 h-11 rounded-2xl bg-slate-900/95 border border-slate-700 text-slate-100 shadow-xl flex items-center justify-center active:scale-95 transition-transform">
+      <i data-lucide="layers" class="w-5 h-5 text-sky-400"></i>
+    </button>
+    <button id="btn-locate-me" title="Pokaż moją lokalizację" class="w-11 h-11 rounded-2xl bg-slate-900/95 border border-slate-700 text-slate-100 shadow-xl flex items-center justify-center active:scale-95 transition-transform">
+      <i data-lucide="locate-fixed" class="w-5 h-5 text-emerald-400"></i>
+    </button>
+    <button id="btn-reset-poland" title="Widok na całą Polskę" class="w-11 h-11 rounded-2xl bg-slate-900/95 border border-slate-700 text-slate-100 shadow-xl flex items-center justify-center active:scale-95 transition-transform">
+      <i data-lucide="maximize-2" class="w-5 h-5 text-amber-400"></i>
+    </button>
+    <button id="btn-add-incident" title="Zgłoś nowe zdarzenie ręcznie" class="w-11 h-11 rounded-2xl bg-red-600 hover:bg-red-500 border border-red-400 text-white shadow-xl shadow-red-600/30 flex items-center justify-center active:scale-95 transition-transform">
+      <i data-lucide="plus" class="w-6 h-6"></i>
+    </button>
+  </div>
+
   <!-- DOLNY PASEK NAWIGACJI -->
-  <nav style="z-index: 40;" class="fixed bottom-0 left-0 right-0 h-16 bg-slate-950/90 backdrop-blur-lg border-t border-slate-800/80 px-3 flex items-center justify-around pointer-events-auto">
+  <nav style="z-index: 40;" class="fixed bottom-0 left-0 right-0 h-16 bg-slate-950/95 backdrop-blur-lg border-t border-slate-800/80 px-2 flex items-center justify-around pointer-events-auto">
     <button id="nav-btn-map" class="flex flex-col items-center justify-center flex-1 py-1 text-red-500">
       <i data-lucide="map" class="w-5 h-5"></i>
-      <span class="text-[10px] font-medium font-tech mt-1">Mapa</span>
+      <span class="text-[10px] font-bold font-tech mt-1">Mapa Polski</span>
     </button>
     <button id="nav-btn-incidents" class="flex flex-col items-center justify-center flex-1 py-1 text-slate-400 hover:text-slate-200">
       <i data-lucide="flame" class="w-5 h-5"></i>
-      <span class="text-[10px] font-medium font-tech mt-1">Meldunki</span>
+      <span class="text-[10px] font-bold font-tech mt-1">Lista Meldunków</span>
+    </button>
+    <button id="nav-btn-add" class="flex flex-col items-center justify-center flex-1 py-1 text-slate-400 hover:text-slate-200">
+      <i data-lucide="plus-circle" class="w-5 h-5"></i>
+      <span class="text-[10px] font-bold font-tech mt-1">Dodaj Alarm</span>
     </button>
     <button id="nav-btn-sis" class="flex flex-col items-center justify-center flex-1 py-1 text-slate-400 hover:text-slate-200">
-      <i data-lucide="shield" class="w-5 h-5"></i>
-      <span class="text-[10px] font-medium font-tech mt-1">SiŚ Info</span>
+      <i data-lucide="shield-alert" class="w-5 h-5"></i>
+      <span class="text-[10px] font-bold font-tech mt-1">Słownik SiŚ</span>
     </button>
   </nav>
 
-  <!-- SZUFLADA MELDUNKÓW -->
-  <div id="incidents-panel" style="display: none; z-index: 50;" class="fixed inset-x-0 bottom-0 max-w-lg mx-auto bg-slate-950/95 border-t border-slate-800 rounded-t-3xl backdrop-blur-xl shadow-2xl flex flex-col h-[75vh]">
-    <div class="px-5 py-3 border-b border-slate-800/70 flex items-center justify-between">
+  <!-- SZUFLADA: LISTA MELDUNKÓW -->
+  <div id="incidents-panel" style="display: none; z-index: 50;" class="fixed inset-x-0 bottom-0 max-w-lg mx-auto bg-slate-950/98 border-t border-slate-800 rounded-t-3xl backdrop-blur-xl shadow-2xl flex flex-col h-[75vh]">
+    <div class="px-5 py-3.5 border-b border-slate-800/80 flex items-center justify-between">
       <div class="flex items-center gap-2">
         <i data-lucide="radio" class="w-5 h-5 text-red-500 animate-pulse"></i>
         <h3 class="font-tech text-base font-bold text-white uppercase tracking-wider">Meldunki operacyjne</h3>
       </div>
-      <button id="close-incidents-panel" class="w-8 h-8 rounded-full bg-slate-800 text-slate-400 flex items-center justify-center">
+      <button id="close-incidents-panel" class="w-8 h-8 rounded-full bg-slate-800 text-slate-300 flex items-center justify-center">
         <i data-lucide="x" class="w-4 h-4"></i>
       </button>
     </div>
     <div id="incidents-list" class="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar"></div>
   </div>
 
-  <!-- MODAL: KARTA SZCZEGÓŁÓW -->
+  <!-- MODAL: KARTA SZCZEGÓŁÓW ZDARZENIA -->
   <div id="details-modal" style="display: none; z-index: 99999;" class="fixed inset-0 bg-black/80 backdrop-blur-sm items-end sm:items-center justify-center p-0 sm:p-4">
     <div class="bg-slate-900 border border-slate-700/80 w-full max-w-lg rounded-t-3xl sm:rounded-2xl p-5 shadow-2xl max-h-[85vh] overflow-y-auto custom-scrollbar">
       <div class="flex items-center justify-between border-b border-slate-800 pb-3 mb-4">
@@ -126,55 +211,198 @@
         </button>
       </div>
       <h3 id="detail-title" class="font-tech text-xl font-bold text-white mb-2"></h3>
-      <div class="flex items-center gap-2 text-xs text-slate-400 font-mono mb-4">
-        <i data-lucide="clock" class="w-3.5 h-3.5 text-slate-500"></i>
+      <div class="flex flex-wrap items-center gap-2 text-xs text-slate-400 font-mono mb-4">
         <span id="detail-time"></span>
         <span>•</span>
-        <i data-lucide="map-pin" class="w-3.5 h-3.5 text-slate-500"></i>
-        <span id="detail-location"></span>
+        <span id="detail-location" class="text-slate-200 font-semibold"></span>
+        <span>•</span>
+        <span id="detail-region" class="text-amber-400"></span>
       </div>
-      <div class="bg-slate-950/60 rounded-xl p-3.5 border border-slate-800/80 mb-4">
-        <div class="text-[11px] font-mono text-slate-400 uppercase tracking-wider mb-1 font-bold">Siły i Środki (SiŚ):</div>
+      <div class="bg-slate-950/70 rounded-xl p-3.5 border border-slate-800/80 mb-4">
+        <div class="text-[11px] font-mono text-slate-400 uppercase tracking-wider mb-1 font-bold">Zadysponowane Siły i Środki (SiŚ):</div>
         <p id="detail-units" class="text-sm font-semibold text-amber-400 font-tech"></p>
       </div>
-      <div class="text-sm text-slate-300 leading-relaxed mb-6" id="detail-desc"></div>
+      <div class="text-sm text-slate-200 leading-relaxed mb-5" id="detail-desc"></div>
+      <div id="detail-source-wrap" class="mb-5" style="display:none;">
+        <a id="detail-source-link" href="#" target="_blank" class="inline-flex items-center gap-1.5 text-xs font-mono text-sky-400 hover:underline">
+          <i data-lucide="external-link" class="w-3.5 h-3.5"></i> Zobacz artykuł źródłowy
+        </a>
+      </div>
       <button onclick="closeModal('details-modal')" class="w-full py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-tech font-bold text-sm tracking-wider uppercase transition-colors">
-        Wróć do mapy
+        Zamknij kartę
       </button>
+    </div>
+  </div>
+
+  <!-- MODAL: SŁOWNIK SKRÓTÓW SiŚ -->
+  <div id="sis-modal" style="display: none; z-index: 99999;" class="fixed inset-0 bg-black/80 backdrop-blur-sm items-end sm:items-center justify-center p-0 sm:p-4">
+    <div class="bg-slate-900 border border-slate-700/80 w-full max-w-lg rounded-t-3xl sm:rounded-2xl p-5 shadow-2xl max-h-[85vh] overflow-y-auto custom-scrollbar">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3 mb-4">
+        <h3 class="font-tech text-lg font-bold text-white uppercase tracking-wider">Oznaczenia Pojazdów i SiŚ</h3>
+        <button onclick="closeModal('sis-modal')" class="text-slate-400 hover:text-white p-1">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+      <div class="space-y-2.5 text-xs text-slate-300">
+        <div class="p-3 rounded-xl bg-slate-950 border border-slate-800"><strong class="text-amber-400 font-mono">GBA</strong> – Średni samochód gaśniczy ze zbiornikiem i autopompą</div>
+        <div class="p-3 rounded-xl bg-slate-950 border border-slate-800"><strong class="text-amber-400 font-mono">GCBA</strong> – Ciężki samochód gaśniczy ze zbiornikiem i autopompą</div>
+        <div class="p-3 rounded-xl bg-slate-950 border border-slate-800"><strong class="text-amber-400 font-mono">SHD / SD</strong> – Samochód specjalny z podnośnikiem hydraulicznym / drabiną</div>
+        <div class="p-3 rounded-xl bg-slate-950 border border-slate-800"><strong class="text-amber-400 font-mono">SLRt / SRt</strong> – Samochód ratownictwa technicznego (wypadki drogowe)</div>
+        <div class="p-3 rounded-xl bg-slate-950 border border-slate-800"><strong class="text-amber-400 font-mono">JRG PSP / OSP KSRG</strong> – Jednostka Ratowniczo-Gaśnicza PSP / Ochotnicza Straż Pożarna w KSRG</div>
+        <div class="p-3 rounded-xl bg-slate-950 border border-slate-800"><strong class="text-amber-400 font-mono">ZRM / LPR</strong> – Zespół Ratownictwa Medycznego (karetka) / Lotnicze Pogotowie Ratunkowe</div>
+      </div>
+      <button onclick="closeModal('sis-modal')" class="mt-5 w-full py-3 rounded-xl bg-slate-800 text-white font-tech font-bold text-sm uppercase">Zamknij</button>
+    </div>
+  </div>
+
+  <!-- MODAL: RĘCZNE DODAWANIE ZDARZENIA -->
+  <div id="add-modal" style="display: none; z-index: 99999;" class="fixed inset-0 bg-black/80 backdrop-blur-sm items-end sm:items-center justify-center p-0 sm:p-4">
+    <div class="bg-slate-900 border border-slate-700/80 w-full max-w-lg rounded-t-3xl sm:rounded-2xl p-5 shadow-2xl max-h-[90vh] overflow-y-auto custom-scrollbar">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3 mb-4">
+        <h3 class="font-tech text-lg font-bold text-white uppercase tracking-wider">Zgłoś nowe zdarzenie na mapę</h3>
+        <button onclick="closeModal('add-modal')" class="text-slate-400 hover:text-white p-1">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+      <form id="add-incident-form" class="space-y-3 text-xs">
+        <div>
+          <label class="block text-slate-400 mb-1 font-mono">Rodzaj zdarzenia</label>
+          <select id="form-cat" class="w-full h-10 px-3 rounded-xl bg-slate-950 border border-slate-700 text-white">
+            <option value="fire">🔥 Pożar (budynek, trawy, sadze, auto)</option>
+            <option value="accident">🚗 Wypadek / Kolizja drogowa</option>
+            <option value="hazard">⚠️ Miejscowe Zagrożenie (drzewo, plama oleju, inne)</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-slate-400 mb-1 font-mono">Krótki tytuł (np. Wypadek na DK14)</label>
+          <input id="form-title" required type="text" placeholder="Wpisz co się stało..." class="w-full h-10 px-3 rounded-xl bg-slate-950 border border-slate-700 text-white" />
+        </div>
+        <div>
+          <label class="block text-slate-400 mb-1 font-mono">Miejscowość i ulica / nr drogi (np. Stryków, Warszawska)</label>
+          <input id="form-loc" required type="text" placeholder="Np. Stryków, skrzyżowanie DK14" class="w-full h-10 px-3 rounded-xl bg-slate-950 border border-slate-700 text-white" />
+        </div>
+        <div>
+          <label class="block text-slate-400 mb-1 font-mono">Siły i Środki (SiŚ)</label>
+          <input id="form-units" type="text" value="Zastępy PSP i OSP, ZRM, Policja" class="w-full h-10 px-3 rounded-xl bg-slate-950 border border-slate-700 text-white" />
+        </div>
+        <div>
+          <label class="block text-slate-400 mb-1 font-mono">Opis sytuacji / utrudnienia</label>
+          <textarea id="form-desc" rows="2" placeholder="Krótki opis akcji..." class="w-full p-3 rounded-xl bg-slate-950 border border-slate-700 text-white"></textarea>
+        </div>
+        <button type="submit" id="form-submit-btn" class="w-full py-3 rounded-xl bg-red-600 hover:bg-red-500 text-white font-tech font-bold text-sm uppercase tracking-wider">
+          Wyślij alarm na mapę
+        </button>
+      </form>
     </div>
   </div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script>
-    // PODŁĄCZENIE DO TWOJEGO PROJEKTU SUPABASE
+    // TWOJE DANE POŁĄCZENIA Z SUPABASE (GOTOWE!)
     const SUPABASE_URL = 'https://cmjlebtqwyyplwdcklzn.supabase.co';
-    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNtamxlYnRxd3l5cGx3ZGNrbHpuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIxNTk5OTksImV4cCI6MjEwNzczNTk5OX0.YczVUJnRBcjMBdaKzgQij7MENxN6vDWfe8Btt2sP5-c'; // WKLEJ TUTAJ SWÓJ KLUCZ anon public Z NOTATNIKA!
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNtamxlYnRxd3l5cGx3ZGNrbHpuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIxNTk5OTksImV4cCI6MjEwNzczNTk5OX0.YczVUJnRBcjMBdaKzgQij7MENxN6vDWfe8Btt2sP5-c'; 
+    // Uwaga: jeśli skopiowany przeze mnie ze zrzutu ekranu koniec klucza był ucięty, wklej w powyższy cudzysłów swój pełny klucz "anon public" z Notatnika!
 
-    let map, markersLayer;
+    let map, markersLayer, currentTileLayer;
+    let mapStyleIndex = 0; // 0 = Drogowa wyraźna, 1 = Satelita, 2 = Ciemna nocna
     let incidents = [];
+    let activeCategory = 'all';
+    let searchQuery = '';
+    let selectedDate = '';
+    let soundEnabled = true;
+    let supabaseClient = null;
+
+    const mapStyles = [
+      {
+        name: 'Drogowa (Miasta i Wsie)',
+        url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+        attr: '&copy; OpenStreetMap Polska'
+      },
+      {
+        name: 'Satelitarna + Drogi',
+        url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+        attr: '&copy; Esri Satellite'
+      },
+      {
+        name: 'Taktyczna Nocna',
+        url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
+        attr: '&copy; CARTO Voyager'
+      }
+    ];
+
+    // Syntezator dźwięku syreny strażackiej (Web Audio API - nie wymaga plików MP3)
+    function playSirenAlert() {
+      if (!soundEnabled) return;
+      try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(550, ctx.currentTime);
+        osc.frequency.linearRampToValueAtTime(880, ctx.currentTime + 0.45);
+        osc.frequency.linearRampToValueAtTime(550, ctx.currentTime + 0.9);
+        gain.gain.setValueAtTime(0.18, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.95);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start();
+        osc.stop(ctx.currentTime + 0.95);
+      } catch (e) {}
+    }
 
     function initMap() {
-      // Centrujemy mapę domyślnie na Polskę centralną (woj. łódzkie / Stryków / A1-A2)
-      map = L.map('map', { zoomControl: false }).setView([51.90, 19.60], 9);
-      
-      L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-        attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
+      // Domyślny widok na całą Polskę (z naciskiem na centrum - okolice Łodzi/Strykowa)
+      map = L.map('map', { zoomControl: false }).setView([51.95, 19.45], 7);
+
+      currentTileLayer = L.tileLayer(mapStyles[0].url, {
+        attribution: mapStyles[0].attr,
         maxZoom: 19
       }).addTo(map);
 
       markersLayer = L.layerGroup().addTo(map);
-      setTimeout(() => map.invalidateSize(), 300);
+
+      // Odświeżenie rozmiaru mapy po wyrenderowaniu ekranu telefonu
+      setTimeout(() => map.invalidateSize(), 250);
+      window.addEventListener('resize', () => map.invalidateSize());
     }
 
-    function renderMarkers() {
+    function getFilteredIncidents() {
+      return incidents.filter(item => {
+        const matchCat = activeCategory === 'all' || item.category === activeCategory;
+        const q = searchQuery.toLowerCase().trim();
+        const matchSearch = !q || 
+          (item.title && item.title.toLowerCase().includes(q)) ||
+          (item.location && item.location.toLowerCase().includes(q)) ||
+          (item.region && item.region.toLowerCase().includes(q)) ||
+          (item.units && item.units.toLowerCase().includes(q)) ||
+          (item.desc && item.desc.toLowerCase().includes(q));
+        const matchDate = !selectedDate || item.dateStr === selectedDate;
+        return matchCat && matchSearch && matchDate;
+      });
+    }
+
+    function updateCounters() {
+      document.getElementById('count-all').innerText = `(${incidents.length})`;
+      document.getElementById('count-fire').innerText = `(${incidents.filter(x => x.category === 'fire').length})`;
+      document.getElementById('count-accident').innerText = `(${incidents.filter(x => x.category === 'accident').length})`;
+      document.getElementById('count-hazard').innerText = `(${incidents.filter(x => x.category === 'hazard').length})`;
+    }
+
+    function renderAll() {
+      updateCounters();
+      const filtered = getFilteredIncidents();
+      document.getElementById('header-counter').innerText = filtered.length;
+
       markersLayer.clearLayers();
-      incidents.forEach(item => {
-        const color = item.category === 'fire' ? '#ef4444' : (item.category === 'accident' ? '#f59e0b' : '#0ea5e9');
+      filtered.forEach(item => {
+        const color = item.category === 'fire' ? '#ef4444' : (item.category === 'accident' ? '#f59e0b' : '#0284c7');
+        const emoji = item.category === 'fire' ? '🔥' : (item.category === 'accident' ? '🚗' : '⚠️');
+        
         const iconHtml = `
-          <div class="relative flex items-center justify-center w-8 h-8">
-            <span class="pulse-ring w-8 h-8" style="background-color: ${color};"></span>
-            <div class="w-7 h-7 rounded-full flex items-center justify-center shadow-lg border-2 border-white/80" style="background-color: ${color};">
-              <span class="text-[11px] font-bold text-white font-mono">${item.category === 'fire' ? '🔥' : (item.category === 'accident' ? '🚗' : '⚠️')}</span>
+          <div class="relative flex items-center justify-center w-9 h-9">
+            <span class="pulse-ring w-9 h-9" style="background-color: ${color};"></span>
+            <div class="w-8 h-8 rounded-full flex items-center justify-center shadow-xl border-2 border-white" style="background-color: ${color};">
+              <span class="text-sm">${emoji}</span>
             </div>
           </div>
         `;
@@ -182,21 +410,22 @@
         const customIcon = L.divIcon({
           className: 'custom-pin',
           html: iconHtml,
-          iconSize: [32, 32],
-          iconAnchor: [16, 16]
+          iconSize: [36, 36],
+          iconAnchor: [18, 18]
         });
 
         const marker = L.marker([item.lat, item.lng], { icon: customIcon });
         const popupContent = `
-          <div class="p-2 min-w-[220px]">
-            <div class="flex items-center justify-between gap-2 mb-1.5">
-              <span class="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-slate-800 text-slate-300">${item.time}</span>
-              <span class="text-[10px] font-mono text-red-400 font-bold uppercase tracking-wider">${item.status}</span>
+          <div class="p-2 min-w-[230px]">
+            <div class="flex items-center justify-between gap-2 mb-1">
+              <span class="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-slate-800 text-slate-200">${item.dateStr} • ${item.time}</span>
+              <span class="text-[10px] font-mono text-red-400 font-bold uppercase">${item.status}</span>
             </div>
             <h4 class="font-tech text-sm font-bold text-white leading-snug mb-1">${item.title}</h4>
-            <p class="text-xs text-slate-300 font-medium mb-2">${item.location}</p>
+            <p class="text-xs text-amber-300 font-semibold mb-1.5">📍 ${item.location}</p>
+            <p class="text-[11px] text-slate-300 line-clamp-2 mb-2.5">${item.desc}</p>
             <button onclick="window.openDetails(${item.id})" class="w-full py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white font-tech text-xs font-bold tracking-wider uppercase transition-colors">
-              Szczegóły SiŚ
+              Pełny meldunek i SiŚ
             </button>
           </div>
         `;
@@ -204,40 +433,47 @@
         marker.addTo(markersLayer);
       });
 
-      document.getElementById('header-counter').innerText = incidents.length;
-    }
-
-    function renderList() {
+      // Renderowanie listy w szufladzie
       const listEl = document.getElementById('incidents-list');
-      if (incidents.length === 0) {
-        listEl.innerHTML = `<div class="text-center py-12 text-slate-500 font-mono text-xs">Brak aktywnych zgłoszeń. Czekam na meldunki z AI...</div>`;
-        return;
-      }
-
-      listEl.innerHTML = incidents.map(item => `
-        <div onclick="window.zoomToIncident(${item.id})" class="p-3.5 rounded-2xl bg-slate-900/80 border border-slate-800 hover:border-red-500/50 cursor-pointer transition-all active:scale-[0.98]">
-          <div class="flex items-center justify-between text-xs font-mono mb-1">
-            <span class="font-bold text-red-400">${item.time}</span>
-            <span class="text-slate-400">${item.location}</span>
+      if (filtered.length === 0) {
+        listEl.innerHTML = `<div class="text-center py-12 text-slate-400 font-mono text-xs">Brak meldunków spełniających kryteria wyszukiwania.</div>`;
+      } else {
+        listEl.innerHTML = filtered.map(item => `
+          <div onclick="window.zoomToIncident(${item.id})" class="p-3.5 rounded-2xl bg-slate-900/90 border border-slate-800 hover:border-red-500/60 cursor-pointer transition-all active:scale-[0.98]">
+            <div class="flex items-center justify-between text-xs font-mono mb-1">
+              <span class="font-bold text-red-400">${item.dateStr} • ${item.time}</span>
+              <span class="text-slate-300 font-semibold">📍 ${item.location}</span>
+            </div>
+            <h4 class="font-tech text-sm font-bold text-white mb-1">${item.title}</h4>
+            <div class="text-xs text-amber-400 font-mono font-medium truncate mb-1.5">🚒 SiŚ: ${item.units}</div>
+            <p class="text-xs text-slate-400 line-clamp-2">${item.desc}</p>
           </div>
-          <h4 class="font-tech text-sm font-bold text-white mb-1.5">${item.title}</h4>
-          <div class="text-xs text-amber-400/90 font-mono font-medium truncate mb-2">SiŚ: ${item.units}</div>
-          <p class="text-xs text-slate-400 line-clamp-2">${item.desc}</p>
-        </div>
-      `).join('');
+        `).join('');
+      }
     }
 
     window.openDetails = function(id) {
       const item = incidents.find(x => x.id == id);
       if (!item) return;
       document.getElementById('detail-title').innerText = item.title;
-      document.getElementById('detail-time').innerText = item.time;
+      document.getElementById('detail-time').innerText = `${item.dateStr} • godz. ${item.time}`;
       document.getElementById('detail-location').innerText = item.location;
+      document.getElementById('detail-region').innerText = item.region || 'Polska';
       document.getElementById('detail-units').innerText = item.units;
       document.getElementById('detail-desc').innerText = item.desc;
+      
+      const srcWrap = document.getElementById('detail-source-wrap');
+      const srcLink = document.getElementById('detail-source-link');
+      if (item.sourceUrl) {
+        srcLink.href = item.sourceUrl;
+        srcWrap.style.display = 'block';
+      } else {
+        srcWrap.style.display = 'none';
+      }
+
       const badge = document.getElementById('detail-badge');
       badge.innerText = item.status;
-      badge.className = `px-2.5 py-1 rounded-full text-xs font-mono font-bold ${item.category === 'fire' ? 'status-badge-fire' : 'status-badge-accident'}`;
+      badge.className = `px-2.5 py-1 rounded-full text-xs font-mono font-bold ${item.category === 'fire' ? 'status-badge-fire' : (item.category === 'accident' ? 'status-badge-accident' : 'status-badge-hazard')}`;
       document.getElementById('details-modal').style.display = 'flex';
     };
 
@@ -245,119 +481,276 @@
       const item = incidents.find(x => x.id == id);
       if (!item) return;
       document.getElementById('incidents-panel').style.display = 'none';
-      map.flyTo([item.lat, item.lng], 13, { duration: 1.2 });
+      map.flyTo([item.lat, item.lng], 13, { duration: 1.1 });
       setTimeout(() => {
         markersLayer.eachLayer(m => {
-          if (m.getLatLng().lat === item.lat && m.getLatLng().lng === item.lng) {
+          if (Math.abs(m.getLatLng().lat - item.lat) < 0.0001 && Math.abs(m.getLatLng().lng - item.lng) < 0.0001) {
             m.openPopup();
           }
         });
-      }, 1300);
+      }, 1200);
     };
 
     function showToast(item) {
+      playSirenAlert();
       const toast = document.getElementById('toast-alert');
       document.getElementById('toast-time').innerText = item.time;
       document.getElementById('toast-title').innerText = item.title;
       document.getElementById('toast-desc').innerText = `${item.location} • SiŚ: ${item.units}`;
-      toast.style.display = 'flex';
+      toast.style.display = 'block';
 
       document.getElementById('toast-click-area').onclick = () => {
         toast.style.display = 'none';
         window.zoomToIncident(item.id);
       };
-
       document.getElementById('toast-close').onclick = (e) => {
         e.stopPropagation();
         toast.style.display = 'none';
       };
 
-      setTimeout(() => { toast.style.display = 'none'; }, 9000);
+      if ('Notification' in window && Notification.permission === 'granted') {
+        new Notification(`🚨 ${item.title}`, {
+          body: `${item.location} • ${item.units}`
+        });
+      }
+
+      setTimeout(() => { toast.style.display = 'none'; }, 10000);
     }
 
     function closeModal(id) {
       document.getElementById(id).style.display = 'none';
     }
 
-    // POBIERANIE DANYCH Z SUPABASE ORAZ NASŁUCHIWANIE NA ŻYWO (REALTIME)
-    async function initSupabase() {
-      if (SUPABASE_ANON_KEY === 'TWOJ_ANON_PUBLIC_KEY') {
-        console.warn('Wklej klucz anon public w kodzie pliku index.html');
-        return;
+    // POŁĄCZENIE Z BAZĄ SUPABASE
+    async function loadIncidentsFromSupabase() {
+      const icon = document.getElementById('refresh-icon');
+      icon.classList.add('animate-spin');
+      try {
+        if (!supabaseClient) {
+          supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        }
+
+        const { data, error } = await supabaseClient
+          .from('incidents')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .limit(200);
+
+        if (error) {
+          console.error('Błąd pobierania z Supabase:', error.message);
+        } else if (data) {
+          incidents = data.map(r => ({
+            id: r.id,
+            title: r.title,
+            category: r.category || 'hazard',
+            status: r.status || 'Trwa akcja',
+            location: r.location,
+            region: r.region || 'Polska',
+            lat: Number(r.lat),
+            lng: Number(r.lng),
+            dateStr: r.date_str,
+            time: r.time_str,
+            units: r.units,
+            desc: r.description,
+            sourceUrl: r.source_url
+          }));
+          renderAll();
+        }
+      } catch (err) {
+        console.error('Błąd inicjalizacji Supabase:', err);
+      } finally {
+        setTimeout(() => icon.classList.remove('animate-spin'), 400);
       }
+    }
 
-      const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
-      // Pobierz istniejące meldunki
-      const { data } = await client
-        .from('incidents')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(100);
-
-      if (data && data.length > 0) {
-        incidents = data.map(r => ({
-          id: r.id,
-          title: r.title,
-          category: r.category,
-          status: r.status,
-          location: r.location,
-          lat: r.lat,
-          lng: r.lng,
-          dateStr: r.date_str,
-          time: r.time_str,
-          units: r.units,
-          desc: r.description
-        }));
-        renderMarkers();
-        renderList();
-      }
-
-      // Nasłuchuj na nowe zgłoszenia generowane przez skrypt w chmurze
-      client
+    function subscribeRealtime() {
+      if (!supabaseClient) return;
+      supabaseClient
         .channel('public:incidents')
         .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'incidents' }, payload => {
           const r = payload.new;
           const newItem = {
             id: r.id,
             title: r.title,
-            category: r.category,
-            status: r.status,
+            category: r.category || 'hazard',
+            status: r.status || 'Trwa akcja',
             location: r.location,
-            lat: r.lat,
-            lng: r.lng,
+            region: r.region || 'Polska',
+            lat: Number(r.lat),
+            lng: Number(r.lng),
             dateStr: r.date_str,
             time: r.time_str,
             units: r.units,
-            desc: r.description
+            desc: r.description,
+            sourceUrl: r.source_url
           };
           incidents.unshift(newItem);
-          renderMarkers();
-          renderList();
+          renderAll();
           showToast(newItem);
         })
         .subscribe();
     }
 
-    // OBSŁUGA PRZYCISKÓW MENU
-    document.getElementById('btn-toggle-incidents').addEventListener('click', () => {
-      const p = document.getElementById('incidents-panel');
-      p.style.display = p.style.display === 'none' ? 'flex' : 'none';
-    });
-    document.getElementById('nav-btn-incidents').addEventListener('click', () => {
-      document.getElementById('incidents-panel').style.display = 'flex';
-    });
-    document.getElementById('nav-btn-map').addEventListener('click', () => {
-      document.getElementById('incidents-panel').style.display = 'none';
-    });
-    document.getElementById('close-incidents-panel').addEventListener('click', () => {
-      document.getElementById('incidents-panel').style.display = 'none';
-    });
-
+    // OBSŁUGA INTERFEJSU I FILTRÓW
     window.addEventListener('DOMContentLoaded', () => {
       lucide.createIcons();
       initMap();
-      initSupabase();
+      loadIncidentsFromSupabase().then(() => subscribeRealtime());
+
+      // Wyszukiwarka tekstowa
+      const searchInput = document.getElementById('search-input');
+      const clearSearch = document.getElementById('clear-search');
+      searchInput.addEventListener('input', (e) => {
+        searchQuery = e.target.value;
+        clearSearch.style.display = searchQuery ? 'block' : 'none';
+        renderAll();
+      });
+      clearSearch.addEventListener('click', () => {
+        searchInput.value = '';
+        searchQuery = '';
+        clearSearch.style.display = 'none';
+        renderAll();
+      });
+
+      // Filtr daty
+      document.getElementById('date-filter').addEventListener('change', (e) => {
+        selectedDate = e.target.value;
+        renderAll();
+      });
+
+      // Filtry kategorii (Pożary / Wypadki / Zagrożenia)
+      document.querySelectorAll('.filter-pill').forEach(btn => {
+        btn.addEventListener('click', () => {
+          document.querySelectorAll('.filter-pill').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          activeCategory = btn.getAttribute('data-cat');
+          renderAll();
+        });
+      });
+
+      // Przełącznik stylu mapy (Drogowa / Satelita / Nocna)
+      document.getElementById('btn-map-style').addEventListener('click', () => {
+        mapStyleIndex = (mapStyleIndex + 1) % mapStyles.length;
+        map.removeLayer(currentTileLayer);
+        currentTileLayer = L.tileLayer(mapStyles[mapStyleIndex].url, {
+          attribution: mapStyles[mapStyleIndex].attr,
+          maxZoom: 19
+        }).addTo(map);
+      });
+
+      // Moja lokalizacja GPS
+      document.getElementById('btn-locate-me').addEventListener('click', () => {
+        if (!navigator.geolocation) return alert('Brak obsługi GPS w przeglądarce.');
+        navigator.geolocation.getCurrentPosition(pos => {
+          const { latitude, longitude } = pos.coords;
+          map.flyTo([latitude, longitude], 13);
+          L.circleMarker([latitude, longitude], {
+            radius: 8,
+            color: '#10b981',
+            fillColor: '#10b981',
+            fillOpacity: 0.9
+          }).addTo(map).bindPopup('Twoja aktualna pozycja').openPopup();
+        }, () => alert('Włącz dostęp do lokalizacji w telefonie.'));
+      });
+
+      // Widok na całą Polskę
+      document.getElementById('btn-reset-poland').addEventListener('click', () => {
+        map.flyTo([52.05, 19.45], 6);
+      });
+
+      // Dźwięk wł/wył
+      document.getElementById('btn-sound-toggle').addEventListener('click', () => {
+        soundEnabled = !soundEnabled;
+        const btn = document.getElementById('btn-sound-toggle');
+        btn.className = soundEnabled 
+          ? 'h-9 w-9 rounded-xl bg-slate-900 border border-slate-700/80 text-emerald-400 flex items-center justify-center'
+          : 'h-9 w-9 rounded-xl bg-slate-900 border border-slate-700/80 text-slate-500 flex items-center justify-center';
+      });
+
+      // Ręczne odświeżenie
+      document.getElementById('btn-refresh').addEventListener('click', () => loadIncidentsFromSupabase());
+
+      // Nawigacja dolna i panele
+      document.getElementById('btn-toggle-incidents').addEventListener('click', () => {
+        const p = document.getElementById('incidents-panel');
+        p.style.display = p.style.display === 'none' ? 'flex' : 'none';
+      });
+      document.getElementById('nav-btn-incidents').addEventListener('click', () => {
+        document.getElementById('incidents-panel').style.display = 'flex';
+      });
+      document.getElementById('nav-btn-map').addEventListener('click', () => {
+        document.getElementById('incidents-panel').style.display = 'none';
+      });
+      document.getElementById('close-incidents-panel').addEventListener('click', () => {
+        document.getElementById('incidents-panel').style.display = 'none';
+      });
+      document.getElementById('nav-btn-sis').addEventListener('click', () => {
+        document.getElementById('sis-modal').style.display = 'flex';
+      });
+      document.getElementById('btn-add-incident').addEventListener('click', () => {
+        document.getElementById('add-modal').style.display = 'flex';
+      });
+      document.getElementById('nav-btn-add').addEventListener('click', () => {
+        document.getElementById('add-modal').style.display = 'flex';
+      });
+
+      // Formularz ręcznego dodawania zdarzenia (z automatycznym geokodowaniem miejscowości)
+      document.getElementById('add-incident-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const btn = document.getElementById('form-submit-btn');
+        btn.innerText = 'Wysyłanie...';
+        btn.disabled = true;
+
+        const cat = document.getElementById('form-cat').value;
+        const title = document.getElementById('form-title').value;
+        const loc = document.getElementById('form-loc').value;
+        const units = document.getElementById('form-units').value;
+        const desc = document.getElementById('form-desc').value || 'Zgłoszenie dodane przez użytkownika aplikacji.';
+
+        let lat = 51.901, lng = 19.598; // Domyślnie okolice Strykowa/Łodzi
+        try {
+          const geoRes = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(loc + ', Polska')}&format=json&limit=1`);
+          const geoData = await geoRes.json();
+          if (geoData && geoData.length > 0) {
+            lat = parseFloat(geoData[0].lat);
+            lng = parseFloat(geoData[0].lon);
+          }
+        } catch (err) {}
+
+        const now = new Date();
+        const dateStr = now.toISOString().split('T')[0];
+        const timeStr = now.toTimeString().slice(0, 5);
+
+        if (supabaseClient) {
+          await supabaseClient.from('incidents').insert([{
+            external_id: 'manual-' + Date.now(),
+            title: title,
+            category: cat,
+            status: 'Trwa akcja',
+            location: loc,
+            region: 'Zgłoszenie własne',
+            lat: lat,
+            lng: lng,
+            date_str: dateStr,
+            time_str: timeStr,
+            units: units,
+            description: desc
+          }]);
+        }
+
+        closeModal('add-modal');
+        e.target.reset();
+        btn.innerText = 'Wyślij alarm na mapę';
+        btn.disabled = false;
+        loadIncidentsFromSupabase();
+      });
+
+      // Zgoda na powiadomienia systemowe przy pierwszym dotknięciu
+      document.body.addEventListener('click', () => {
+        if ('Notification' in window && Notification.permission === 'default') {
+          Notification.requestPermission();
+        }
+      }, { once: true });
     });
   </script>
 </body>
