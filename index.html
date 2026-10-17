@@ -26,7 +26,6 @@
     
     #map { position: absolute; top: 0; left: 0; right: 0; bottom: 0; width: 100%; height: 100%; z-index: 10; background: #e2e8f0; }
     
-    /* Styl dymków na mapie */
     .straz-popup .leaflet-popup-content-wrapper { background: rgba(15, 23, 42, 0.96) !important; color: #f8fafc !important; border: 1px solid rgba(239, 68, 68, 0.5) !important; border-radius: 16px !important; box-shadow: 0 20px 35px -10px rgba(0, 0, 0, 0.7) !important; backdrop-filter: blur(12px); padding: 4px; }
     .straz-popup .leaflet-popup-tip { background: rgba(15, 23, 42, 0.96) !important; }
     .leaflet-container a.leaflet-popup-close-button { color: #94a3b8 !important; padding: 6px 8px 0 0 !important; }
@@ -58,7 +57,7 @@
       </div>
       <div class="flex-1 min-w-0">
         <div class="flex items-center gap-2">
-          <span class="text-[11px] font-mono uppercase tracking-wider font-bold text-red-400">ALARM • NOWE ZDARZENIE</span>
+          <span class="text-[11px] font-mono uppercase tracking-wider font-bold text-red-400">ALARM SELEKTYWNY • DSP</span>
           <span class="text-[10px] text-slate-400 font-mono" id="toast-time"></span>
         </div>
         <h4 id="toast-title" class="text-sm font-bold text-white truncate font-tech mt-0.5"></h4>
@@ -95,7 +94,11 @@
       </div>
 
       <div class="flex items-center gap-1.5">
-        <button id="btn-sound-toggle" title="Dźwięk syreny" class="h-9 w-9 rounded-xl bg-slate-900 border border-slate-700/80 text-emerald-400 flex items-center justify-center active:scale-95 transition-all">
+        <button id="btn-test-sound" title="Przetestuj dźwięk alarmu DSP" class="h-9 px-2.5 rounded-xl bg-slate-900 border border-slate-700/80 text-amber-400 text-[11px] font-mono font-bold flex items-center gap-1 active:scale-95 transition-all">
+          <i data-lucide="bell-ring" class="w-3.5 h-3.5"></i>
+          <span class="hidden sm:inline">TEST DSP</span>
+        </button>
+        <button id="btn-sound-toggle" title="Włącz/Wyłącz dźwięk" class="h-9 w-9 rounded-xl bg-slate-900 border border-slate-700/80 text-emerald-400 flex items-center justify-center active:scale-95 transition-all">
           <i data-lucide="volume-2" class="w-4 h-4" id="sound-icon"></i>
         </button>
         <button id="btn-refresh" title="Odśwież bazę" class="h-9 w-9 rounded-xl bg-slate-900 border border-slate-700/80 text-slate-300 flex items-center justify-center active:scale-95 transition-all">
@@ -108,21 +111,30 @@
       </div>
     </header>
 
-    <!-- Pasek wyszukiwania i filtrów -->
+    <!-- Pasek wyszukiwania i przycisku kalendarza -->
     <div class="px-3 pt-2.5 pb-2 bg-gradient-to-b from-slate-950/85 via-slate-950/60 to-transparent pointer-events-auto">
       <div class="max-w-xl mx-auto space-y-2">
-        <!-- Wyszukiwarka + Kalendarz -->
-        <div class="flex gap-2">
+        <div class="flex gap-1.5">
+          <!-- Wyszukiwarka -->
           <div class="relative flex-1">
             <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2"></i>
-            <input id="search-input" type="text" placeholder="Szukaj miejscowości, ulicy, DK/A1, jednostki..." 
+            <input id="search-input" type="text" placeholder="Szukaj miejscowości, drogi, jednostki..." 
               class="w-full h-10 pl-9 pr-8 rounded-xl bg-slate-900/95 border border-slate-700/90 text-xs text-white placeholder-slate-400 focus:outline-none focus:border-red-500 shadow-lg" />
             <button id="clear-search" style="display:none;" class="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white">
               <i data-lucide="x" class="w-3.5 h-3.5"></i>
             </button>
           </div>
-          <input id="date-filter" type="date" title="Filtruj po dacie"
-            class="h-10 px-2.5 rounded-xl bg-slate-900/95 border border-slate-700/90 text-xs text-slate-200 font-mono focus:outline-none focus:border-red-500 shadow-lg w-[125px]" />
+
+          <!-- Przycisk otwierający Kalendarz Modalny -->
+          <button id="btn-open-calendar" class="h-10 px-3 rounded-xl bg-slate-900/95 border border-slate-700/90 hover:border-red-500/60 text-xs text-slate-100 font-mono font-bold flex items-center gap-1.5 shadow-lg active:scale-95 transition-all whitespace-nowrap">
+            <i data-lucide="calendar" class="w-4 h-4 text-red-400"></i>
+            <span id="calendar-btn-label">Dzisiaj</span>
+          </button>
+
+          <!-- Szybki przycisk powrotu do "Dzisiaj" (pokazuje się, gdy przeglądasz archiwum) -->
+          <button id="btn-quick-today" style="display: none;" title="Wróć do dzisiejszego dnia" class="h-10 px-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-white font-tech font-bold text-xs flex items-center gap-1 shadow-lg active:scale-95 transition-all">
+            <span>Dziś</span>
+          </button>
         </div>
 
         <!-- Kafelki kategorii -->
@@ -151,9 +163,9 @@
   <!-- GŁÓWNA MAPA POLSKI -->
   <div id="map"></div>
 
-  <!-- BOCZNE PRZYCISKI NA MAPIE (GPS, Zmiana mapy, Cała Polska, Dodaj zgłoszenie) -->
+  <!-- BOCZNE PRZYCISKI NA MAPIE -->
   <div style="z-index: 35;" class="fixed right-3 bottom-20 flex flex-col gap-2.5 pointer-events-auto">
-    <button id="btn-map-style" title="Zmień wygląd mapy (Drogowa / Satelita / Nocna)" class="w-11 h-11 rounded-2xl bg-slate-900/95 border border-slate-700 text-slate-100 shadow-xl flex items-center justify-center active:scale-95 transition-transform">
+    <button id="btn-map-style" title="Zmień wygląd mapy" class="w-11 h-11 rounded-2xl bg-slate-900/95 border border-slate-700 text-slate-100 shadow-xl flex items-center justify-center active:scale-95 transition-transform">
       <i data-lucide="layers" class="w-5 h-5 text-sky-400"></i>
     </button>
     <button id="btn-locate-me" title="Pokaż moją lokalizację" class="w-11 h-11 rounded-2xl bg-slate-900/95 border border-slate-700 text-slate-100 shadow-xl flex items-center justify-center active:scale-95 transition-transform">
@@ -177,9 +189,9 @@
       <i data-lucide="flame" class="w-5 h-5"></i>
       <span class="text-[10px] font-bold font-tech mt-1">Lista Meldunków</span>
     </button>
-    <button id="nav-btn-add" class="flex flex-col items-center justify-center flex-1 py-1 text-slate-400 hover:text-slate-200">
-      <i data-lucide="plus-circle" class="w-5 h-5"></i>
-      <span class="text-[10px] font-bold font-tech mt-1">Dodaj Alarm</span>
+    <button id="nav-btn-calendar" class="flex flex-col items-center justify-center flex-1 py-1 text-slate-400 hover:text-slate-200">
+      <i data-lucide="calendar-days" class="w-5 h-5"></i>
+      <span class="text-[10px] font-bold font-tech mt-1">Kalendarz</span>
     </button>
     <button id="nav-btn-sis" class="flex flex-col items-center justify-center flex-1 py-1 text-slate-400 hover:text-slate-200">
       <i data-lucide="shield-alert" class="w-5 h-5"></i>
@@ -187,12 +199,56 @@
     </button>
   </nav>
 
+  <!-- MODAL: INTERAKTYWNY KALENDARZ DNI I MIESIĘCY -->
+  <div id="calendar-modal" style="display: none; z-index: 99999;" class="fixed inset-0 bg-black/80 backdrop-blur-sm items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-700/90 w-full max-w-sm rounded-3xl p-5 shadow-2xl">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3 mb-4">
+        <div class="flex items-center gap-2">
+          <i data-lucide="calendar" class="w-5 h-5 text-red-500"></i>
+          <h3 class="font-tech text-base font-bold text-white uppercase tracking-wider">Archiwum i wybór dnia</h3>
+        </div>
+        <button onclick="closeModal('calendar-modal')" class="text-slate-400 hover:text-white p-1">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <!-- Nawigacja miesiąca -->
+      <div class="flex items-center justify-between mb-3 bg-slate-950/80 p-2 rounded-2xl border border-slate-800">
+        <button id="cal-prev-month" class="w-9 h-9 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-200 flex items-center justify-center active:scale-95">
+          <i data-lucide="chevron-left" class="w-5 h-5"></i>
+        </button>
+        <div id="cal-month-year" class="font-tech font-bold text-sm text-white uppercase tracking-wider">Październik 2026</div>
+        <button id="cal-next-month" class="w-9 h-9 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-200 flex items-center justify-center active:scale-95">
+          <i data-lucide="chevron-right" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <!-- Nagłówki dni tygodnia -->
+      <div class="grid grid-cols-7 gap-1 text-center text-[10px] font-mono text-slate-400 mb-1.5">
+        <div>Pn</div><div>Wt</div><div>Śr</div><div>Cz</div><div>Pt</div><div>Sb</div><div class="text-red-400">Nd</div>
+      </div>
+
+      <!-- Siatka dni -->
+      <div id="cal-days-grid" class="grid grid-cols-7 gap-1.5 mb-4"></div>
+
+      <!-- Szybkie przyciski na dole kalendarza -->
+      <div class="flex gap-2">
+        <button id="cal-btn-today" class="flex-1 py-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-white font-tech font-bold text-xs uppercase tracking-wider shadow-lg shadow-red-600/25 transition-all">
+          Przełącz na dzisiaj
+        </button>
+        <button id="cal-btn-all" class="px-3 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-tech font-bold text-xs uppercase tracking-wider transition-all">
+          Pokaż wszystkie
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- SZUFLADA: LISTA MELDUNKÓW -->
   <div id="incidents-panel" style="display: none; z-index: 50;" class="fixed inset-x-0 bottom-0 max-w-lg mx-auto bg-slate-950/98 border-t border-slate-800 rounded-t-3xl backdrop-blur-xl shadow-2xl flex flex-col h-[75vh]">
     <div class="px-5 py-3.5 border-b border-slate-800/80 flex items-center justify-between">
       <div class="flex items-center gap-2">
         <i data-lucide="radio" class="w-5 h-5 text-red-500 animate-pulse"></i>
-        <h3 class="font-tech text-base font-bold text-white uppercase tracking-wider">Meldunki operacyjne</h3>
+        <h3 class="font-tech text-base font-bold text-white uppercase tracking-wider">Meldunki z wybranego dnia</h3>
       </div>
       <button id="close-incidents-panel" class="w-8 h-8 rounded-full bg-slate-800 text-slate-300 flex items-center justify-center">
         <i data-lucide="x" class="w-4 h-4"></i>
@@ -298,19 +354,38 @@
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script>
-    // TWOJE DANE POŁĄCZENIA Z SUPABASE (GOTOWE!)
+    // TWOJE DANE POŁĄCZENIA Z SUPABASE
     const SUPABASE_URL = 'https://cmjlebtqwyyplwdcklzn.supabase.co';
-    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNtamxlYnRxd3l5cGx3ZGNrbHpuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIxNTk5OTksImV4cCI6MjEwNzczNTk5OX0.YczVUJnRBcjMBdaKzgQij7MENxN6vDWfe8Btt2sP5-c'; 
-    // Uwaga: jeśli skopiowany przeze mnie ze zrzutu ekranu koniec klucza był ucięty, wklej w powyższy cudzysłów swój pełny klucz "anon public" z Notatnika!
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNtamxlYnRxd3l5cGx3ZGNrbHpuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIxNTk5OTksImV4cCI6MjEwNzczNTk5OX0.YczVUJnRBcjMBdaKzgQij7MENxN6vDWfe8Btt2sP5-c'; // <-- PAMIĘTAJ O WKLEJENIU SWOJEGO KLUCZA!
+
+    // Funkcja zwracająca dzisiejszą datę w polskiej strefie czasowej (YYYY-MM-DD)
+    function getTodayStr() {
+      const now = new Date();
+      const y = now.getFullYear();
+      const m = String(now.getMonth() + 1).padStart(2, '0');
+      const d = String(now.getDate()).padStart(2, '0');
+      return `${y}-${m}-${d}`;
+    }
 
     let map, markersLayer, currentTileLayer;
-    let mapStyleIndex = 0; // 0 = Drogowa wyraźna, 1 = Satelita, 2 = Ciemna nocna
+    let mapStyleIndex = 0;
     let incidents = [];
     let activeCategory = 'all';
     let searchQuery = '';
-    let selectedDate = '';
+    
+    // Domyślnie pokazujemy TYLKO DZISIEJSZY DZIEŃ (mapa zeruje się po północy)
+    let currentToday = getTodayStr();
+    let selectedDate = currentToday; 
+    let calViewYear = new Date().getFullYear();
+    let calViewMonth = new Date().getMonth();
+
     let soundEnabled = true;
     let supabaseClient = null;
+
+    const monthNamesPL = [
+      'Styczeń', 'Luty', 'Marzec', 'Kwiecień', 'Maj', 'Czerwiec',
+      'Lipiec', 'Sierpień', 'Wrzesień', 'Październik', 'Listopad', 'Grudzień'
+    ];
 
     const mapStyles = [
       {
@@ -330,28 +405,78 @@
       }
     ];
 
-    // Syntezator dźwięku syreny strażackiej (Web Audio API - nie wymaga plików MP3)
-    function playSirenAlert() {
+    // REALISTYCZNY SYSTEM SELEKTYWNEGO ALARMOWANIA OSP (DSP-50 + SYRENA)
+    function playSelectiveFireAlarm() {
       if (!soundEnabled) return;
       try {
-        const ctx = new (window.AudioContext || window.webkitAudioContext)();
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type = 'sawtooth';
-        osc.frequency.setValueAtTime(550, ctx.currentTime);
-        osc.frequency.linearRampToValueAtTime(880, ctx.currentTime + 0.45);
-        osc.frequency.linearRampToValueAtTime(550, ctx.currentTime + 0.9);
-        gain.gain.setValueAtTime(0.18, ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.95);
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.start();
-        osc.stop(ctx.currentTime + 0.95);
-      } catch (e) {}
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        const ctx = new AudioCtx();
+        const now = ctx.currentTime;
+
+        // Część 1: 5-tonowe wywołanie selektywne DSP (charakterystyczny biper z remizy)
+        const dspFreqs = [1060, 1480, 1160, 1850, 1320, 1060, 1850];
+        dspFreqs.forEach((freq, idx) => {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(freq, now + idx * 0.085);
+          
+          gain.gain.setValueAtTime(0.25, now + idx * 0.085);
+          gain.gain.setValueAtTime(0.01, now + (idx + 1) * 0.085 - 0.005);
+
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start(now + idx * 0.085);
+          osc.stop(now + (idx + 1) * 0.085);
+        });
+
+        // Część 2: Dwa krótkie uderzenia potwierdzenia pagera
+        [0.75, 0.95].forEach(startOffset => {
+          const beep = ctx.createOscillator();
+          const bGain = ctx.createGain();
+          beep.type = 'square';
+          beep.frequency.setValueAtTime(2400, now + startOffset);
+          bGain.gain.setValueAtTime(0.15, now + startOffset);
+          bGain.gain.exponentialRampToValueAtTime(0.001, now + startOffset + 0.12);
+          beep.connect(bGain);
+          bGain.connect(ctx.destination);
+          beep.start(now + startOffset);
+          beep.stop(now + startOffset + 0.13);
+        });
+
+        // Część 3: Poważna, ciężka syrena alarmowa z dachu remizy (rozpędzający się wirnik)
+        const siren = ctx.createOscillator();
+        const sirenGain = ctx.createGain();
+        siren.type = 'sawtooth';
+        
+        const sStart = now + 1.25;
+        siren.frequency.setValueAtTime(190, sStart);
+        siren.frequency.exponentialRampToValueAtTime(430, sStart + 1.6); // Wycie w górę
+        siren.frequency.exponentialRampToValueAtTime(280, sStart + 2.8); // Lekki spadek
+        siren.frequency.exponentialRampToValueAtTime(440, sStart + 4.0); // Druga fala
+
+        sirenGain.gain.setValueAtTime(0.01, sStart);
+        sirenGain.gain.linearRampToValueAtTime(0.22, sStart + 0.5);
+        sirenGain.gain.setValueAtTime(0.22, sStart + 3.4);
+        sirenGain.gain.exponentialRampToValueAtTime(0.001, sStart + 4.3);
+
+        // Filtr dolnoprzepustowy dla głębokiego, realistycznego brzmienia syreny
+        const filter = ctx.createBiquadFilter();
+        filter.type = 'lowpass';
+        filter.frequency.setValueAtTime(900, sStart);
+
+        siren.connect(filter);
+        filter.connect(sirenGain);
+        sirenGain.connect(ctx.destination);
+
+        siren.start(sStart);
+        siren.stop(sStart + 4.35);
+      } catch (e) {
+        console.warn('Audio zablokowane do czasu kliknięcia w ekran:', e);
+      }
     }
 
     function initMap() {
-      // Domyślny widok na całą Polskę (z naciskiem na centrum - okolice Łodzi/Strykowa)
       map = L.map('map', { zoomControl: false }).setView([51.95, 19.45], 7);
 
       currentTileLayer = L.tileLayer(mapStyles[0].url, {
@@ -361,13 +486,84 @@
 
       markersLayer = L.layerGroup().addTo(map);
 
-      // Odświeżenie rozmiaru mapy po wyrenderowaniu ekranu telefonu
       setTimeout(() => map.invalidateSize(), 250);
       window.addEventListener('resize', () => map.invalidateSize());
     }
 
+    // Formatowanie etykiety daty na przycisku kalendarza
+    function updateDateUI() {
+      const labelEl = document.getElementById('calendar-btn-label');
+      const quickTodayBtn = document.getElementById('btn-quick-today');
+      const today = getTodayStr();
+
+      if (!selectedDate) {
+        labelEl.innerText = 'Wszystkie dni';
+        quickTodayBtn.style.display = 'flex';
+      } else if (selectedDate === today) {
+        const parts = today.split('-');
+        labelEl.innerText = `Dziś (${parts[2]}.${parts[1]})`;
+        quickTodayBtn.style.display = 'none';
+      } else {
+        const parts = selectedDate.split('-');
+        labelEl.innerText = `${parts[2]}.${parts[1]}.${parts[0]}`;
+        quickTodayBtn.style.display = 'flex';
+      }
+    }
+
+    // Renderowanie siatki kalendarza w modalu
+    function renderCalendarModal() {
+      document.getElementById('cal-month-year').innerText = `${monthNamesPL[calViewMonth]} ${calViewYear}`;
+      const grid = document.getElementById('cal-days-grid');
+      grid.innerHTML = '';
+
+      const firstDay = new Date(calViewYear, calViewMonth, 1).getDay();
+      const startOffset = (firstDay === 0) ? 6 : firstDay - 1; // Poniedziałek jako 0
+      const daysInMonth = new Date(calViewYear, calViewMonth + 1, 0).getDate();
+      const today = getTodayStr();
+
+      // Puste pola przed 1. dniem miesiąca
+      for (let i = 0; i < startOffset; i++) {
+        grid.innerHTML += `<div></div>`;
+      }
+
+      for (let d = 1; d <= daysInMonth; d++) {
+        const dateStr = `${calViewYear}-${String(calViewMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+        const dayIncidentsCount = incidents.filter(x => x.dateStr === dateStr).length;
+        const isSelected = selectedDate === dateStr;
+        const isToday = today === dateStr;
+
+        let btnClasses = 'relative h-10 rounded-xl font-mono text-xs font-bold flex flex-col items-center justify-center transition-all ';
+        if (isSelected) {
+          btnClasses += 'bg-red-600 text-white border-2 border-red-300 shadow-lg shadow-red-600/40';
+        } else if (isToday) {
+          btnClasses += 'bg-slate-800 text-amber-400 border border-amber-500/60';
+        } else {
+          btnClasses += 'bg-slate-950/90 hover:bg-slate-800 text-slate-200 border border-slate-800/80';
+        }
+
+        const dotHtml = dayIncidentsCount > 0 
+          ? `<span class="w-1.5 h-1.5 rounded-full ${isSelected ? 'bg-white' : 'bg-red-500'} mt-0.5"></span>` 
+          : `<span class="w-1.5 h-1.5 mt-0.5"></span>`;
+
+        grid.innerHTML += `
+          <button onclick="window.selectCalendarDay('${dateStr}')" class="${btnClasses}">
+            <span>${d}</span>
+            ${dotHtml}
+          </button>
+        `;
+      }
+    }
+
+    window.selectCalendarDay = function(dateStr) {
+      selectedDate = dateStr;
+      updateDateUI();
+      renderAll();
+      closeModal('calendar-modal');
+    };
+
     function getFilteredIncidents() {
       return incidents.filter(item => {
+        const matchDate = !selectedDate || item.dateStr === selectedDate;
         const matchCat = activeCategory === 'all' || item.category === activeCategory;
         const q = searchQuery.toLowerCase().trim();
         const matchSearch = !q || 
@@ -376,19 +572,21 @@
           (item.region && item.region.toLowerCase().includes(q)) ||
           (item.units && item.units.toLowerCase().includes(q)) ||
           (item.desc && item.desc.toLowerCase().includes(q));
-        const matchDate = !selectedDate || item.dateStr === selectedDate;
-        return matchCat && matchSearch && matchDate;
+        return matchDate && matchCat && matchSearch;
       });
     }
 
     function updateCounters() {
-      document.getElementById('count-all').innerText = `(${incidents.length})`;
-      document.getElementById('count-fire').innerText = `(${incidents.filter(x => x.category === 'fire').length})`;
-      document.getElementById('count-accident').innerText = `(${incidents.filter(x => x.category === 'accident').length})`;
-      document.getElementById('count-hazard').innerText = `(${incidents.filter(x => x.category === 'hazard').length})`;
+      // Liczniki na kafelkach pokazują liczby dla aktualnie wybranego dnia!
+      const dayIncidents = incidents.filter(item => !selectedDate || item.dateStr === selectedDate);
+      document.getElementById('count-all').innerText = `(${dayIncidents.length})`;
+      document.getElementById('count-fire').innerText = `(${dayIncidents.filter(x => x.category === 'fire').length})`;
+      document.getElementById('count-accident').innerText = `(${dayIncidents.filter(x => x.category === 'accident').length})`;
+      document.getElementById('count-hazard').innerText = `(${dayIncidents.filter(x => x.category === 'hazard').length})`;
     }
 
     function renderAll() {
+      updateDateUI();
       updateCounters();
       const filtered = getFilteredIncidents();
       document.getElementById('header-counter').innerText = filtered.length;
@@ -433,10 +631,13 @@
         marker.addTo(markersLayer);
       });
 
-      // Renderowanie listy w szufladzie
       const listEl = document.getElementById('incidents-list');
       if (filtered.length === 0) {
-        listEl.innerHTML = `<div class="text-center py-12 text-slate-400 font-mono text-xs">Brak meldunków spełniających kryteria wyszukiwania.</div>`;
+        listEl.innerHTML = `
+          <div class="text-center py-12 px-4 space-y-2">
+            <div class="text-slate-400 font-mono text-xs">Brak zgłoszeń w dniu <strong class="text-white">${selectedDate || 'Wszystkie'}</strong>.</div>
+            <p class="text-[11px] text-slate-500">Mapa jest czysta i gotowa na nowe dzisiejsze meldunki. Możesz kliknąć Kalendarz u góry, aby przejrzeć wczorajsze akcje.</p>
+          </div>`;
       } else {
         listEl.innerHTML = filtered.map(item => `
           <div onclick="window.zoomToIncident(${item.id})" class="p-3.5 rounded-2xl bg-slate-900/90 border border-slate-800 hover:border-red-500/60 cursor-pointer transition-all active:scale-[0.98]">
@@ -492,7 +693,7 @@
     };
 
     function showToast(item) {
-      playSirenAlert();
+      playSelectiveFireAlarm();
       const toast = document.getElementById('toast-alert');
       document.getElementById('toast-time').innerText = item.time;
       document.getElementById('toast-title').innerText = item.title;
@@ -521,7 +722,6 @@
       document.getElementById(id).style.display = 'none';
     }
 
-    // POŁĄCZENIE Z BAZĄ SUPABASE
     async function loadIncidentsFromSupabase() {
       const icon = document.getElementById('refresh-icon');
       icon.classList.add('animate-spin');
@@ -534,7 +734,7 @@
           .from('incidents')
           .select('*')
           .order('created_at', { ascending: false })
-          .limit(200);
+          .limit(300);
 
         if (error) {
           console.error('Błąd pobierania z Supabase:', error.message);
@@ -591,10 +791,22 @@
         .subscribe();
     }
 
-    // OBSŁUGA INTERFEJSU I FILTRÓW
+    // ZEGAR PÓŁNOCY: Automatycznie zeruje mapę na nowy dzień, gdy wybije 00:00
+    setInterval(() => {
+      const nowToday = getTodayStr();
+      if (nowToday !== currentToday) {
+        if (selectedDate === currentToday) {
+          selectedDate = nowToday; // Przełącz na nowy dzień
+        }
+        currentToday = nowToday;
+        renderAll();
+      }
+    }, 30000);
+
     window.addEventListener('DOMContentLoaded', () => {
       lucide.createIcons();
       initMap();
+      updateDateUI();
       loadIncidentsFromSupabase().then(() => subscribeRealtime());
 
       // Wyszukiwarka tekstowa
@@ -612,13 +824,51 @@
         renderAll();
       });
 
-      // Filtr daty
-      document.getElementById('date-filter').addEventListener('change', (e) => {
-        selectedDate = e.target.value;
-        renderAll();
+      // Obsługa Kalendarza Modalnego
+      const openCal = () => {
+        if (selectedDate) {
+          const parts = selectedDate.split('-');
+          calViewYear = parseInt(parts[0], 10);
+          calViewMonth = parseInt(parts[1], 10) - 1;
+        }
+        renderCalendarModal();
+        document.getElementById('calendar-modal').style.display = 'flex';
+      };
+
+      document.getElementById('btn-open-calendar').addEventListener('click', openCal);
+      document.getElementById('nav-btn-calendar').addEventListener('click', openCal);
+
+      document.getElementById('cal-prev-month').addEventListener('click', () => {
+        calViewMonth--;
+        if (calViewMonth < 0) { calViewMonth = 11; calViewYear--; }
+        renderCalendarModal();
+      });
+      document.getElementById('cal-next-month').addEventListener('click', () => {
+        calViewMonth++;
+        if (calViewMonth > 11) { calViewMonth = 0; calViewYear++; }
+        renderCalendarModal();
       });
 
-      // Filtry kategorii (Pożary / Wypadki / Zagrożenia)
+      // Przycisk "Przełącz na dzisiaj" w kalendarzu oraz obok wyszukiwarki
+      const switchToToday = () => {
+        selectedDate = getTodayStr();
+        const now = new Date();
+        calViewYear = now.getFullYear();
+        calViewMonth = now.getMonth();
+        renderAll();
+        closeModal('calendar-modal');
+      };
+
+      document.getElementById('cal-btn-today').addEventListener('click', switchToToday);
+      document.getElementById('btn-quick-today').addEventListener('click', switchToToday);
+
+      document.getElementById('cal-btn-all').addEventListener('click', () => {
+        selectedDate = '';
+        renderAll();
+        closeModal('calendar-modal');
+      });
+
+      // Filtry kategorii
       document.querySelectorAll('.filter-pill').forEach(btn => {
         btn.addEventListener('click', () => {
           document.querySelectorAll('.filter-pill').forEach(b => b.classList.remove('active'));
@@ -628,7 +878,7 @@
         });
       });
 
-      // Przełącznik stylu mapy (Drogowa / Satelita / Nocna)
+      // Przełącznik stylu mapy
       document.getElementById('btn-map-style').addEventListener('click', () => {
         mapStyleIndex = (mapStyleIndex + 1) % mapStyles.length;
         map.removeLayer(currentTileLayer);
@@ -638,7 +888,7 @@
         }).addTo(map);
       });
 
-      // Moja lokalizacja GPS
+      // Lokalizacja GPS
       document.getElementById('btn-locate-me').addEventListener('click', () => {
         if (!navigator.geolocation) return alert('Brak obsługi GPS w przeglądarce.');
         navigator.geolocation.getCurrentPosition(pos => {
@@ -653,9 +903,16 @@
         }, () => alert('Włącz dostęp do lokalizacji w telefonie.'));
       });
 
-      // Widok na całą Polskę
       document.getElementById('btn-reset-poland').addEventListener('click', () => {
         map.flyTo([52.05, 19.45], 6);
+      });
+
+      // Test alarmu selektywnego DSP
+      document.getElementById('btn-test-sound').addEventListener('click', () => {
+        const prev = soundEnabled;
+        soundEnabled = true;
+        playSelectiveFireAlarm();
+        soundEnabled = prev;
       });
 
       // Dźwięk wł/wył
@@ -667,10 +924,9 @@
           : 'h-9 w-9 rounded-xl bg-slate-900 border border-slate-700/80 text-slate-500 flex items-center justify-center';
       });
 
-      // Ręczne odświeżenie
       document.getElementById('btn-refresh').addEventListener('click', () => loadIncidentsFromSupabase());
 
-      // Nawigacja dolna i panele
+      // Nawigacja dolna i szuflada
       document.getElementById('btn-toggle-incidents').addEventListener('click', () => {
         const p = document.getElementById('incidents-panel');
         p.style.display = p.style.display === 'none' ? 'flex' : 'none';
@@ -690,11 +946,8 @@
       document.getElementById('btn-add-incident').addEventListener('click', () => {
         document.getElementById('add-modal').style.display = 'flex';
       });
-      document.getElementById('nav-btn-add').addEventListener('click', () => {
-        document.getElementById('add-modal').style.display = 'flex';
-      });
 
-      // Formularz ręcznego dodawania zdarzenia (z automatycznym geokodowaniem miejscowości)
+      // Formularz ręcznego dodawania zdarzenia
       document.getElementById('add-incident-form').addEventListener('submit', async (e) => {
         e.preventDefault();
         const btn = document.getElementById('form-submit-btn');
@@ -707,7 +960,7 @@
         const units = document.getElementById('form-units').value;
         const desc = document.getElementById('form-desc').value || 'Zgłoszenie dodane przez użytkownika aplikacji.';
 
-        let lat = 51.901, lng = 19.598; // Domyślnie okolice Strykowa/Łodzi
+        let lat = 51.901, lng = 19.598;
         try {
           const geoRes = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(loc + ', Polska')}&format=json&limit=1`);
           const geoData = await geoRes.json();
@@ -717,9 +970,8 @@
           }
         } catch (err) {}
 
-        const now = new Date();
-        const dateStr = now.toISOString().split('T')[0];
-        const timeStr = now.toTimeString().slice(0, 5);
+        const dateStr = getTodayStr();
+        const timeStr = new Date().toTimeString().slice(0, 5);
 
         if (supabaseClient) {
           await supabaseClient.from('incidents').insert([{
@@ -745,7 +997,6 @@
         loadIncidentsFromSupabase();
       });
 
-      // Zgoda na powiadomienia systemowe przy pierwszym dotknięciu
       document.body.addEventListener('click', () => {
         if ('Notification' in window && Notification.permission === 'default') {
           Notification.requestPermission();
