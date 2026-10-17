@@ -24,7 +24,12 @@
     .font-tech { font-family: var(--font-tech); }
     .font-mono { font-family: var(--font-mono); }
     
-    #map { position: absolute; top: 0; left: 0; right: 0; bottom: 0; width: 100%; height: 100%; z-index: 10; background: #e2e8f0; }
+    #map { position: absolute; top: 0; left: 0; right: 0; bottom: 0; width: 100%; height: 100%; z-index: 10; background: #090a0f; }
+    
+    /* Filtr prawdziwego trybu nocnego dla dokładnej mapy drogowej (zachowuje wszystkie wsie i ulice) */
+    .map-dark-filter .leaflet-tile-pane {
+      filter: invert(100%) hue-rotate(180deg) brightness(95%) contrast(90%);
+    }
     
     .straz-popup .leaflet-popup-content-wrapper { background: rgba(15, 23, 42, 0.96) !important; color: #f8fafc !important; border: 1px solid rgba(239, 68, 68, 0.5) !important; border-radius: 16px !important; box-shadow: 0 20px 35px -10px rgba(0, 0, 0, 0.7) !important; backdrop-filter: blur(12px); padding: 4px; }
     .straz-popup .leaflet-popup-tip { background: rgba(15, 23, 42, 0.96) !important; }
@@ -165,7 +170,7 @@
 
   <!-- BOCZNE PRZYCISKI NA MAPIE -->
   <div style="z-index: 35;" class="fixed right-3 bottom-20 flex flex-col gap-2.5 pointer-events-auto">
-    <button id="btn-map-style" title="Zmień wygląd mapy" class="w-11 h-11 rounded-2xl bg-slate-900/95 border border-slate-700 text-slate-100 shadow-xl flex items-center justify-center active:scale-95 transition-transform">
+    <button id="btn-map-style" title="Wybierz motyw mapy (Jasna / Ciemna / Satelita)" class="w-11 h-11 rounded-2xl bg-slate-900/95 border border-slate-700 text-slate-100 shadow-xl flex items-center justify-center active:scale-95 transition-transform">
       <i data-lucide="layers" class="w-5 h-5 text-sky-400"></i>
     </button>
     <button id="btn-locate-me" title="Pokaż moją lokalizację" class="w-11 h-11 rounded-2xl bg-slate-900/95 border border-slate-700 text-slate-100 shadow-xl flex items-center justify-center active:scale-95 transition-transform">
@@ -198,6 +203,25 @@
       <span class="text-[10px] font-bold font-tech mt-1">Słownik SiŚ</span>
     </button>
   </nav>
+
+  <!-- MODAL: WYBÓR MOTYWU MAPY (JASNA / CIEMNA NOCNA / CZARNA / SATELITA) -->
+  <div id="map-style-modal" style="display: none; z-index: 99999;" class="fixed inset-0 bg-black/80 backdrop-blur-sm items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-700/90 w-full max-w-sm rounded-3xl p-5 shadow-2xl">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3 mb-4">
+        <div class="flex items-center gap-2">
+          <i data-lucide="layers" class="w-5 h-5 text-sky-400"></i>
+          <h3 class="font-tech text-base font-bold text-white uppercase tracking-wider">Wygląd i motyw mapy</h3>
+        </div>
+        <button onclick="closeModal('map-style-modal')" class="text-slate-400 hover:text-white p-1">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+      <div id="map-styles-list" class="space-y-2.5 mb-4"></div>
+      <button onclick="closeModal('map-style-modal')" class="w-full py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-tech font-bold text-xs uppercase tracking-wider">
+        Zamknij
+      </button>
+    </div>
+  </div>
 
   <!-- MODAL: INTERAKTYWNY KALENDARZ DNI I MIESIĘCY -->
   <div id="calendar-modal" style="display: none; z-index: 99999;" class="fixed inset-0 bg-black/80 backdrop-blur-sm items-center justify-center p-4">
@@ -358,7 +382,6 @@
     const SUPABASE_URL = 'https://cmjlebtqwyyplwdcklzn.supabase.co';
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNtamxlYnRxd3l5cGx3ZGNrbHpuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIxNTk5OTksImV4cCI6MjEwNzczNTk5OX0.YczVUJnRBcjMBdaKzgQij7MENxN6vDWfe8Btt2sP5-c'; // <-- PAMIĘTAJ O WKLEJENIU SWOJEGO KLUCZA!
 
-    // Funkcja zwracająca dzisiejszą datę w polskiej strefie czasowej (YYYY-MM-DD)
     function getTodayStr() {
       const now = new Date();
       const y = now.getFullYear();
@@ -368,12 +391,12 @@
     }
 
     let map, markersLayer, currentTileLayer;
-    let mapStyleIndex = 0;
+    // Wczytujemy zapamiętany motyw mapy z pamięci telefonu (domyślnie 1 = Ciemna Nocna z wsiami!)
+    let mapStyleIndex = parseInt(localStorage.getItem('straz_map_style') || '1', 10);
     let incidents = [];
     let activeCategory = 'all';
     let searchQuery = '';
     
-    // Domyślnie pokazujemy TYLKO DZISIEJSZY DZIEŃ (mapa zeruje się po północy)
     let currentToday = getTodayStr();
     let selectedDate = currentToday; 
     let calViewYear = new Date().getFullYear();
@@ -389,19 +412,32 @@
 
     const mapStyles = [
       {
-        name: 'Drogowa (Miasta i Wsie)',
+        name: '☀️ Jasna Drogowa (Standard)',
+        desc: 'Klasyczna jasna mapa ze wszystkimi wsiami i ulicami',
         url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-        attr: '&copy; OpenStreetMap Polska'
+        attr: '&copy; OpenStreetMap Polska',
+        darkFilter: false
       },
       {
-        name: 'Satelitarna + Drogi',
+        name: '🌙 Ciemna Drogowa (Tryb Nocny HD)',
+        desc: 'Ciemny motyw nie rażący w oczy + widoczne wszystkie wsie i drogi',
+        url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+        attr: '&copy; OpenStreetMap Polska (Tryb Nocny)',
+        darkFilter: true
+      },
+      {
+        name: '🌑 Czarna Taktyczna (Minimalistyczna)',
+        desc: 'Głęboka czerń pod podgląd całej Polski z daleka',
+        url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+        attr: '&copy; CARTO Dark',
+        darkFilter: false
+      },
+      {
+        name: '🛰️ Mapa Satelitarna',
+        desc: 'Zdjęcia satelitarne lasów, pól i zabudowań',
         url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-        attr: '&copy; Esri Satellite'
-      },
-      {
-        name: 'Taktyczna Nocna',
-        url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
-        attr: '&copy; CARTO Voyager'
+        attr: '&copy; Esri Satellite',
+        darkFilter: false
       }
     ];
 
@@ -413,24 +449,20 @@
         const ctx = new AudioCtx();
         const now = ctx.currentTime;
 
-        // Część 1: 5-tonowe wywołanie selektywne DSP (charakterystyczny biper z remizy)
         const dspFreqs = [1060, 1480, 1160, 1850, 1320, 1060, 1850];
         dspFreqs.forEach((freq, idx) => {
           const osc = ctx.createOscillator();
           const gain = ctx.createGain();
           osc.type = 'sine';
           osc.frequency.setValueAtTime(freq, now + idx * 0.085);
-          
           gain.gain.setValueAtTime(0.25, now + idx * 0.085);
           gain.gain.setValueAtTime(0.01, now + (idx + 1) * 0.085 - 0.005);
-
           osc.connect(gain);
           gain.connect(ctx.destination);
           osc.start(now + idx * 0.085);
           osc.stop(now + (idx + 1) * 0.085);
         });
 
-        // Część 2: Dwa krótkie uderzenia potwierdzenia pagera
         [0.75, 0.95].forEach(startOffset => {
           const beep = ctx.createOscillator();
           const bGain = ctx.createGain();
@@ -444,23 +476,21 @@
           beep.stop(now + startOffset + 0.13);
         });
 
-        // Część 3: Poważna, ciężka syrena alarmowa z dachu remizy (rozpędzający się wirnik)
         const siren = ctx.createOscillator();
         const sirenGain = ctx.createGain();
         siren.type = 'sawtooth';
         
         const sStart = now + 1.25;
         siren.frequency.setValueAtTime(190, sStart);
-        siren.frequency.exponentialRampToValueAtTime(430, sStart + 1.6); // Wycie w górę
-        siren.frequency.exponentialRampToValueAtTime(280, sStart + 2.8); // Lekki spadek
-        siren.frequency.exponentialRampToValueAtTime(440, sStart + 4.0); // Druga fala
+        siren.frequency.exponentialRampToValueAtTime(430, sStart + 1.6);
+        siren.frequency.exponentialRampToValueAtTime(280, sStart + 2.8);
+        siren.frequency.exponentialRampToValueAtTime(440, sStart + 4.0);
 
         sirenGain.gain.setValueAtTime(0.01, sStart);
         sirenGain.gain.linearRampToValueAtTime(0.22, sStart + 0.5);
         sirenGain.gain.setValueAtTime(0.22, sStart + 3.4);
         sirenGain.gain.exponentialRampToValueAtTime(0.001, sStart + 4.3);
 
-        // Filtr dolnoprzepustowy dla głębokiego, realistycznego brzmienia syreny
         const filter = ctx.createBiquadFilter();
         filter.type = 'lowpass';
         filter.frequency.setValueAtTime(900, sStart);
@@ -476,21 +506,61 @@
       }
     }
 
-    function initMap() {
-      map = L.map('map', { zoomControl: false }).setView([51.95, 19.45], 7);
+    function applyMapStyle(index) {
+      if (index < 0 || index >= mapStyles.length) index = 0;
+      mapStyleIndex = index;
+      localStorage.setItem('straz_map_style', String(index));
 
-      currentTileLayer = L.tileLayer(mapStyles[0].url, {
-        attribution: mapStyles[0].attr,
+      const style = mapStyles[index];
+      if (currentTileLayer) {
+        map.removeLayer(currentTileLayer);
+      }
+      currentTileLayer = L.tileLayer(style.url, {
+        attribution: style.attr,
         maxZoom: 19
       }).addTo(map);
 
+      const mapEl = document.getElementById('map');
+      if (style.darkFilter) {
+        mapEl.classList.add('map-dark-filter');
+      } else {
+        mapEl.classList.remove('map-dark-filter');
+      }
+    }
+
+    function renderMapStylesModal() {
+      const list = document.getElementById('map-styles-list');
+      list.innerHTML = mapStyles.map((st, idx) => {
+        const active = idx === mapStyleIndex;
+        return `
+          <button onclick="window.selectMapStyle(${idx})" class="w-full text-left p-3.5 rounded-2xl border transition-all flex items-center justify-between ${active ? 'bg-red-600/20 border-red-500 text-white shadow-lg' : 'bg-slate-950/90 border-slate-800 text-slate-200 hover:bg-slate-800/80'}">
+            <div class="pr-2">
+              <div class="font-tech font-bold text-sm">${st.name}</div>
+              <div class="text-[11px] text-slate-400 mt-0.5">${st.desc}</div>
+            </div>
+            <div class="w-5 h-5 rounded-full border flex items-center justify-center flex-shrink-0 ${active ? 'border-red-400 bg-red-500 text-white' : 'border-slate-600'}">
+              ${active ? '✓' : ''}
+            </div>
+          </button>
+        `;
+      }).join('');
+    }
+
+    window.selectMapStyle = function(idx) {
+      applyMapStyle(idx);
+      renderMapStylesModal();
+      setTimeout(() => closeModal('map-style-modal'), 180);
+    };
+
+    function initMap() {
+      map = L.map('map', { zoomControl: false }).setView([51.95, 19.45], 7);
+      applyMapStyle(mapStyleIndex);
       markersLayer = L.layerGroup().addTo(map);
 
       setTimeout(() => map.invalidateSize(), 250);
       window.addEventListener('resize', () => map.invalidateSize());
     }
 
-    // Formatowanie etykiety daty na przycisku kalendarza
     function updateDateUI() {
       const labelEl = document.getElementById('calendar-btn-label');
       const quickTodayBtn = document.getElementById('btn-quick-today');
@@ -510,18 +580,16 @@
       }
     }
 
-    // Renderowanie siatki kalendarza w modalu
     function renderCalendarModal() {
       document.getElementById('cal-month-year').innerText = `${monthNamesPL[calViewMonth]} ${calViewYear}`;
       const grid = document.getElementById('cal-days-grid');
       grid.innerHTML = '';
 
       const firstDay = new Date(calViewYear, calViewMonth, 1).getDay();
-      const startOffset = (firstDay === 0) ? 6 : firstDay - 1; // Poniedziałek jako 0
+      const startOffset = (firstDay === 0) ? 6 : firstDay - 1;
       const daysInMonth = new Date(calViewYear, calViewMonth + 1, 0).getDate();
       const today = getTodayStr();
 
-      // Puste pola przed 1. dniem miesiąca
       for (let i = 0; i < startOffset; i++) {
         grid.innerHTML += `<div></div>`;
       }
@@ -577,7 +645,6 @@
     }
 
     function updateCounters() {
-      // Liczniki na kafelkach pokazują liczby dla aktualnie wybranego dnia!
       const dayIncidents = incidents.filter(item => !selectedDate || item.dateStr === selectedDate);
       document.getElementById('count-all').innerText = `(${dayIncidents.length})`;
       document.getElementById('count-fire').innerText = `(${dayIncidents.filter(x => x.category === 'fire').length})`;
@@ -796,7 +863,7 @@
       const nowToday = getTodayStr();
       if (nowToday !== currentToday) {
         if (selectedDate === currentToday) {
-          selectedDate = nowToday; // Przełącz na nowy dzień
+          selectedDate = nowToday;
         }
         currentToday = nowToday;
         renderAll();
@@ -849,7 +916,6 @@
         renderCalendarModal();
       });
 
-      // Przycisk "Przełącz na dzisiaj" w kalendarzu oraz obok wyszukiwarki
       const switchToToday = () => {
         selectedDate = getTodayStr();
         const now = new Date();
@@ -878,14 +944,10 @@
         });
       });
 
-      // Przełącznik stylu mapy
+      // Otwieranie okienka wyboru motywu mapy (Jasna / Ciemna / Czarna / Satelita)
       document.getElementById('btn-map-style').addEventListener('click', () => {
-        mapStyleIndex = (mapStyleIndex + 1) % mapStyles.length;
-        map.removeLayer(currentTileLayer);
-        currentTileLayer = L.tileLayer(mapStyles[mapStyleIndex].url, {
-          attribution: mapStyles[mapStyleIndex].attr,
-          maxZoom: 19
-        }).addTo(map);
+        renderMapStylesModal();
+        document.getElementById('map-style-modal').style.display = 'flex';
       });
 
       // Lokalizacja GPS
