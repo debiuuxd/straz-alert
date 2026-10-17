@@ -32,7 +32,6 @@ RSS_FEEDS = [
 ]
 
 def call_gemini_with_fallback(prompt):
-    # Próbujemy kolejno najstabilniejszych darmowych modeli w Google AI Studio
     models_to_try = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"]
     last_err = None
     for model_name in models_to_try:
@@ -53,8 +52,8 @@ def call_gemini_with_fallback(prompt):
 def run_worker():
     print("Rozpoczynam pobieranie wiadomości z wielu źródeł (Kraj + Okolice)...")
     
-    # Pobieramy listę już zapisanych linków z bazy, żeby nie pytać o to samo
-    existing_res = supabase.table('incidents').select('external_id').order('created_at', { 'ascending': False }).limit(300).execute()
+    # Poprawione zapytanie do Supabase (czysta składnia Pythona)
+    existing_res = supabase.table('incidents').select('external_id').order('created_at', desc=True).limit(300).execute()
     existing_ids = set(r['external_id'] for r in (existing_res.data or []) if r.get('external_id'))
 
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/124.0.0.0 Safari/537.36'}
