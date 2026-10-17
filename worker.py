@@ -43,7 +43,8 @@ def run_worker():
 
         print(f"Znaleziono wpisów w kanale: {len(parsed_feed.entries)}")
         
-        for entry in parsed_feed.entries[:5]:
+        # Pobieramy tylko 2 najnowsze z każdego źródła, żeby oszczędzać limit zapytań AI
+        for entry in parsed_feed.entries[:2]:
             external_id = entry.get('id') or entry.get('link')
             title = entry.get('title', '')
             summary = entry.get('summary', '') or entry.get('description', '')
@@ -77,9 +78,9 @@ def run_worker():
             """
 
             try:
-                # Używamy teraz najnowszego modelu wskazzonego przez komunikat błędu
+                # Używamy modelu 1.5-flash z ogromnym darmowym limitem dziennym (1500 zapytań)
                 response = ai_client.models.generate_content(
-                    model='gemini-3.8-flash',
+                    model='gemini-1.5-flash',
                     contents=prompt,
                     config=types.GenerateContentConfig(
                         response_mime_type="application/json",
