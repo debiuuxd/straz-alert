@@ -26,9 +26,14 @@
     
     #map { position: absolute; top: 0; left: 0; right: 0; bottom: 0; width: 100%; height: 100%; z-index: 10; background: #090a0f; }
     
-    /* Filtr prawdziwego trybu nocnego dla dokładnej mapy drogowej (zachowuje wszystkie wsie i ulice) */
+    /* 1. Filtr Ciemny Nocny HD (kolorowe drogi, ciemne tło, wszystkie wsie) */
     .map-dark-filter .leaflet-tile-pane {
       filter: invert(100%) hue-rotate(180deg) brightness(95%) contrast(90%);
+    }
+
+    /* 2. Filtr Czarna Taktyczna OLED (smolista czerń, wysoki kontrast, zero kluczy API!) */
+    .map-oled-filter .leaflet-tile-pane {
+      filter: invert(100%) grayscale(100%) brightness(75%) contrast(155%);
     }
     
     .straz-popup .leaflet-popup-content-wrapper { background: rgba(15, 23, 42, 0.96) !important; color: #f8fafc !important; border: 1px solid rgba(239, 68, 68, 0.5) !important; border-radius: 16px !important; box-shadow: 0 20px 35px -10px rgba(0, 0, 0, 0.7) !important; backdrop-filter: blur(12px); padding: 4px; }
@@ -81,7 +86,6 @@
   <!-- GÓRNY PANEL: NAGŁÓWEK + WYSZUKIWARKA + FILTRY -->
   <div style="z-index: 40;" class="fixed top-0 left-0 right-0 pointer-events-none flex flex-col">
     
-    <!-- Pasek tytułowy -->
     <header class="h-14 bg-slate-950/90 backdrop-blur-md border-b border-slate-800/80 px-3.5 flex items-center justify-between pointer-events-auto shadow-lg">
       <div class="flex items-center gap-2.5">
         <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-red-600 to-amber-600 flex items-center justify-center shadow-md shadow-red-600/30 border border-red-400/40">
@@ -116,11 +120,9 @@
       </div>
     </header>
 
-    <!-- Pasek wyszukiwania i przycisku kalendarza -->
     <div class="px-3 pt-2.5 pb-2 bg-gradient-to-b from-slate-950/85 via-slate-950/60 to-transparent pointer-events-auto">
       <div class="max-w-xl mx-auto space-y-2">
         <div class="flex gap-1.5">
-          <!-- Wyszukiwarka -->
           <div class="relative flex-1">
             <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2"></i>
             <input id="search-input" type="text" placeholder="Szukaj miejscowości, drogi, jednostki..." 
@@ -130,19 +132,16 @@
             </button>
           </div>
 
-          <!-- Przycisk otwierający Kalendarz Modalny -->
           <button id="btn-open-calendar" class="h-10 px-3 rounded-xl bg-slate-900/95 border border-slate-700/90 hover:border-red-500/60 text-xs text-slate-100 font-mono font-bold flex items-center gap-1.5 shadow-lg active:scale-95 transition-all whitespace-nowrap">
             <i data-lucide="calendar" class="w-4 h-4 text-red-400"></i>
             <span id="calendar-btn-label">Dzisiaj</span>
           </button>
 
-          <!-- Szybki przycisk powrotu do "Dzisiaj" (pokazuje się, gdy przeglądasz archiwum) -->
           <button id="btn-quick-today" style="display: none;" title="Wróć do dzisiejszego dnia" class="h-10 px-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-white font-tech font-bold text-xs flex items-center gap-1 shadow-lg active:scale-95 transition-all">
             <span>Dziś</span>
           </button>
         </div>
 
-        <!-- Kafelki kategorii -->
         <div class="flex items-center gap-1.5 overflow-x-auto custom-scrollbar pb-1">
           <button data-cat="all" class="filter-pill active px-3 py-1.5 rounded-xl bg-slate-900/90 border border-slate-700/80 text-slate-200 text-xs font-tech font-bold whitespace-nowrap transition-all flex items-center gap-1.5 shadow">
             <span>Wszystkie</span>
@@ -204,7 +203,7 @@
     </button>
   </nav>
 
-  <!-- MODAL: WYBÓR MOTYWU MAPY (JASNA / CIEMNA NOCNA / CZARNA / SATELITA) -->
+  <!-- MODAL: WYBÓR MOTYWU MAPY -->
   <div id="map-style-modal" style="display: none; z-index: 99999;" class="fixed inset-0 bg-black/80 backdrop-blur-sm items-center justify-center p-4">
     <div class="bg-slate-900 border border-slate-700/90 w-full max-w-sm rounded-3xl p-5 shadow-2xl">
       <div class="flex items-center justify-between border-b border-slate-800 pb-3 mb-4">
@@ -236,7 +235,6 @@
         </button>
       </div>
 
-      <!-- Nawigacja miesiąca -->
       <div class="flex items-center justify-between mb-3 bg-slate-950/80 p-2 rounded-2xl border border-slate-800">
         <button id="cal-prev-month" class="w-9 h-9 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-200 flex items-center justify-center active:scale-95">
           <i data-lucide="chevron-left" class="w-5 h-5"></i>
@@ -247,15 +245,12 @@
         </button>
       </div>
 
-      <!-- Nagłówki dni tygodnia -->
       <div class="grid grid-cols-7 gap-1 text-center text-[10px] font-mono text-slate-400 mb-1.5">
         <div>Pn</div><div>Wt</div><div>Śr</div><div>Cz</div><div>Pt</div><div>Sb</div><div class="text-red-400">Nd</div>
       </div>
 
-      <!-- Siatka dni -->
       <div id="cal-days-grid" class="grid grid-cols-7 gap-1.5 mb-4"></div>
 
-      <!-- Szybkie przyciski na dole kalendarza -->
       <div class="flex gap-2">
         <button id="cal-btn-today" class="flex-1 py-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-white font-tech font-bold text-xs uppercase tracking-wider shadow-lg shadow-red-600/25 transition-all">
           Przełącz na dzisiaj
@@ -391,7 +386,6 @@
     }
 
     let map, markersLayer, currentTileLayer;
-    // Wczytujemy zapamiętany motyw mapy z pamięci telefonu (domyślnie 1 = Ciemna Nocna z wsiami!)
     let mapStyleIndex = parseInt(localStorage.getItem('straz_map_style') || '1', 10);
     let incidents = [];
     let activeCategory = 'all';
@@ -416,32 +410,31 @@
         desc: 'Klasyczna jasna mapa ze wszystkimi wsiami i ulicami',
         url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
         attr: '&copy; OpenStreetMap Polska',
-        darkFilter: false
+        filterClass: ''
       },
       {
         name: '🌙 Ciemna Drogowa (Tryb Nocny HD)',
         desc: 'Ciemny motyw nie rażący w oczy + widoczne wszystkie wsie i drogi',
         url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
         attr: '&copy; OpenStreetMap Polska (Tryb Nocny)',
-        darkFilter: true
+        filterClass: 'map-dark-filter'
       },
       {
-        name: '🌑 Czarna Taktyczna (Minimalistyczna)',
-        desc: 'Głęboka czerń pod podgląd całej Polski z daleka',
-        url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-        attr: '&copy; CARTO Dark',
-        darkFilter: false
+        name: '🌑 Czarna Taktyczna (OLED Kontrast)',
+        desc: 'Głęboka smolista czerń z białą siatką dróg i miast (bez kluczy API)',
+        url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+        attr: '&copy; OpenStreetMap Polska (Tryb OLED)',
+        filterClass: 'map-oled-filter'
       },
       {
         name: '🛰️ Mapa Satelitarna',
         desc: 'Zdjęcia satelitarne lasów, pól i zabudowań',
         url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
         attr: '&copy; Esri Satellite',
-        darkFilter: false
+        filterClass: ''
       }
     ];
 
-    // REALISTYCZNY SYSTEM SELEKTYWNEGO ALARMOWANIA OSP (DSP-50 + SYRENA)
     function playSelectiveFireAlarm() {
       if (!soundEnabled) return;
       try {
@@ -521,10 +514,9 @@
       }).addTo(map);
 
       const mapEl = document.getElementById('map');
-      if (style.darkFilter) {
-        mapEl.classList.add('map-dark-filter');
-      } else {
-        mapEl.classList.remove('map-dark-filter');
+      mapEl.classList.remove('map-dark-filter', 'map-oled-filter');
+      if (style.filterClass) {
+        mapEl.classList.add(style.filterClass);
       }
     }
 
@@ -858,7 +850,6 @@
         .subscribe();
     }
 
-    // ZEGAR PÓŁNOCY: Automatycznie zeruje mapę na nowy dzień, gdy wybije 00:00
     setInterval(() => {
       const nowToday = getTodayStr();
       if (nowToday !== currentToday) {
@@ -876,7 +867,6 @@
       updateDateUI();
       loadIncidentsFromSupabase().then(() => subscribeRealtime());
 
-      // Wyszukiwarka tekstowa
       const searchInput = document.getElementById('search-input');
       const clearSearch = document.getElementById('clear-search');
       searchInput.addEventListener('input', (e) => {
@@ -891,7 +881,6 @@
         renderAll();
       });
 
-      // Obsługa Kalendarza Modalnego
       const openCal = () => {
         if (selectedDate) {
           const parts = selectedDate.split('-');
@@ -934,7 +923,6 @@
         closeModal('calendar-modal');
       });
 
-      // Filtry kategorii
       document.querySelectorAll('.filter-pill').forEach(btn => {
         btn.addEventListener('click', () => {
           document.querySelectorAll('.filter-pill').forEach(b => b.classList.remove('active'));
@@ -944,13 +932,11 @@
         });
       });
 
-      // Otwieranie okienka wyboru motywu mapy (Jasna / Ciemna / Czarna / Satelita)
       document.getElementById('btn-map-style').addEventListener('click', () => {
         renderMapStylesModal();
         document.getElementById('map-style-modal').style.display = 'flex';
       });
 
-      // Lokalizacja GPS
       document.getElementById('btn-locate-me').addEventListener('click', () => {
         if (!navigator.geolocation) return alert('Brak obsługi GPS w przeglądarce.');
         navigator.geolocation.getCurrentPosition(pos => {
@@ -969,7 +955,6 @@
         map.flyTo([52.05, 19.45], 6);
       });
 
-      // Test alarmu selektywnego DSP
       document.getElementById('btn-test-sound').addEventListener('click', () => {
         const prev = soundEnabled;
         soundEnabled = true;
@@ -977,7 +962,6 @@
         soundEnabled = prev;
       });
 
-      // Dźwięk wł/wył
       document.getElementById('btn-sound-toggle').addEventListener('click', () => {
         soundEnabled = !soundEnabled;
         const btn = document.getElementById('btn-sound-toggle');
@@ -988,7 +972,6 @@
 
       document.getElementById('btn-refresh').addEventListener('click', () => loadIncidentsFromSupabase());
 
-      // Nawigacja dolna i szuflada
       document.getElementById('btn-toggle-incidents').addEventListener('click', () => {
         const p = document.getElementById('incidents-panel');
         p.style.display = p.style.display === 'none' ? 'flex' : 'none';
@@ -1009,7 +992,6 @@
         document.getElementById('add-modal').style.display = 'flex';
       });
 
-      // Formularz ręcznego dodawania zdarzenia
       document.getElementById('add-incident-form').addEventListener('submit', async (e) => {
         e.preventDefault();
         const btn = document.getElementById('form-submit-btn');
