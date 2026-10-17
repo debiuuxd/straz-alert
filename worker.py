@@ -1,5 +1,6 @@
 import os
 import json
+import math
 import urllib.request
 import urllib.parse
 from datetime import datetime
@@ -16,11 +17,11 @@ supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 ai_client = genai.Client(api_key=GEMINI_API_KEY)
 
 RSS_FEEDS = [
-    # 1. Okolice: Stryków, Głowno, Zgierz, Łódź, powiat zgierski (PRIORYTET 1)
-    "https://news.google.com/rss/search?q=(wypadek+OR+po%C5%BCar+OR+kolizja+OR+zderzenie)+(Stryk%C3%B3w+OR+G%C5%82owno+OR+Zgierz+OR+%C5%81%C3%B3d%C5%BA+OR+zgierski)+when:1d&hl=pl&gl=PL&ceid=PL:pl",
+    # 1. Okolice: Stryków, Głowno, Zgierz, Łódź, Brzeziny, Łowicz, Kutno, powiat zgierski (PRIORYTET 1)
+    "https://news.google.com/rss/search?q=(wypadek+OR+po%C5%BCar+OR+kolizja+OR+stra%C5%BC)+(Stryk%C3%B3w+OR+G%C5%82owno+OR+Zgierz+OR+%C5%81%C3%B3d%C5%BA+OR+zgierski+OR+Brzeziny)+when:1d&hl=pl&gl=PL&ceid=PL:pl",
     
     # 2. Autostrady A1 i A2 oraz drogi w woj. łódzkim (PRIORYTET 2)
-    "https://news.google.com/rss/search?q=(wypadek+OR+po%C5%BCar+OR+zablokowana+OR+dachowanie)+(A1+OR+A2+OR+S8+OR+DK14+OR+%C5%82%C3%B3dzkie)+when:1d&hl=pl&gl=PL&ceid=PL:pl",
+    "https://news.google.com/rss/search?q=(wypadek+OR+po%C5%BCar+OR+zablokowana+OR+dachowanie)+(A1+OR+A2+OR+S8+OR+DK14+OR+DK92+OR+%C5%82%C3%B3dzkie)+when:1d&hl=pl&gl=PL&ceid=PL:pl",
     
     # 3. Ogólnopolski portal strażacki
     "https://remiza.com.pl/feed/",
@@ -34,19 +35,17 @@ IGNORE_WORDS = [
     "odznaczenia", "przetarg", "zakup", "wspomnienie", "rocznica", "pogrzeb", 
     "żegnają", "oddali hołd", "nie żyje komendant", "był zastępcą", "lotto", 
     "losowania", "szczęśliwe liczby", "skrót dnia", "przegląd", "trening", 
-    "szkolenie", "ćwiczenia", "zawody", "turniej", "humbak", "wieloryb"
+    "szkolenie", "ćwiczenia", "zawody", "turniej", "humbak", "wieloryb", "sekcje zwłok"
 ]
 
-# Rozszerzone rdzenie słów (łapią też odmiany typu "zderzyły", "płomieniach", "przewróciła"!)
 ACTION_STEMS = [
     "pożar", "płon", "płomien", "spłon", "ogień", "ogni", "wypadk", "wypadek", 
     "kolizj", "zderz", "dachowa", "potrąc", "zablokow", "utrudnieni", "akcj", 
     "zastęp", "straż", "uderz", "wjechał", "wyciek", "plam", "drzew", "ewakuac", 
-    "przewróc", "lawet", "karambol", "rann", "poszkodowan", "śmierteln"
+    "przewróc", "lawet", "karambol", "rann", "poszkodowan", "śmierteln", "runął", "tragedi"
 ]
 
 def get_available_models():
-    """Ustawia najszybszy i najmniej limitowany model flash-lite na pierwszym miejscu i wyklucza modele głosowe (tts)."""
     preferred = ["gemini-flash-lite-latest", "gemini-3.8-flash-lite", "gemini-3.8-flash", "gemini-flash-latest"]
     try:
         for m in ai_client.models.list():
@@ -60,14 +59,42 @@ def get_available_models():
         print(f"Info o liście modeli: {e}")
     return preferred
 
+def is_duplicate_today(new_title, new_loc, new_cat, new_lat, new_lng, today_incidents):
+    """Sprawdza, czy inna redakcja nie opisała już dzisiaj tego samego zdarzenia."""
+    t1 = new_title.lower().strip()
+    l1 = new_loc.lower().strip()
+
+    for inc in today_incidents:
+        t2 = (inc.get("title") or "").lower().strip()
+        l2 = (inc.get("location") or "").lower().strip()
+        cat2 = inc.get("category")
+
+        # 1. Identyczny tytuł lub identyczna lokalizacja w tej samej kategorii
+        if t1 == t2 or (l1 == l2 and l1 != "polska" and new_cat == cat2):
+            return True
+
+        # 2. Bardzo bliska odległość GPS (ok. 3-4 km) w tej samej kategorii zdarzenia
+        if new_cat == cat2 and inc.get("lat") and inc.get("lng"):
+            dist = math.hypot(new_lat - float(inc["lat"]), new_lng - float(inc["lng"]))
+            if dist < 0.035: # ~3.5 km w linii prostej
+                return True
+
+    return False
+
 def run_worker():
-    print("Rozpoczynam inteligentne skanowanie (Kraj + Okolice)...")
+    print("Rozpoczynam inteligentne skanowanie (z Anty-Duplikatorem)...")
     
     available_models = get_available_models()
     print(f"Kolejność modeli AI: {available_models[:4]}")
 
-    existing_res = supabase.table('incidents').select('external_id').order('created_at', desc=True).limit(400).execute()
-    existing_ids = set(r['external_id'] for r in (existing_res.data or []) if r.get('external_id'))
+    now_pl = datetime.now()
+    today_str = now_pl.strftime("%Y-%m-%d")
+
+    # Pobieramy ostatnie wpisy do sprawdzenia linków oraz dzisiejsze wpisy do Anty-Duplikatora
+    existing_res = supabase.table('incidents').select('external_id, title, location, category, lat, lng, date_str').order('created_at', desc=True).limit(400).execute()
+    all_rows = existing_res.data or []
+    existing_ids = set(r['external_id'] for r in all_rows if r.get('external_id'))
+    today_incidents = [r for r in all_rows if r.get('date_str') == today_str]
 
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/124.0.0.0 Safari/537.36'}
     ai_calls_this_run = 0
@@ -75,7 +102,7 @@ def run_worker():
 
     for feed_url in RSS_FEEDS:
         if ai_calls_this_run >= MAX_AI_CALLS_PER_RUN:
-            print("Osiągnięto limit 5 analiz w tym cyklu. Kolejne wpisy w następnym uruchomieniu.")
+            print("Osiągnięto limit 5 analiz w tym cyklu.")
             break
 
         print(f"\nSkanuję źródło: {feed_url[:65]}...")
@@ -119,11 +146,11 @@ def run_worker():
             Treść: {summary}
 
             Zwróć wynik WYŁĄCZNIE jako czysty obiekt JSON:
-            - "is_incident": boolean (true tylko jeśli to konkretny pożar, wypadek, kolizja lub akcja służb w Polsce; false jeśli to zagranica, felieton lub statystyka).
+            - "is_incident": boolean (true tylko jeśli to konkretny pożar, wypadek, kolizja lub akcja służb w Polsce; false jeśli to zagranica, felieton, śledztwo po dniach lub statystyka).
             - "title": string (Krótki tytuł meldunku po polsku, np. "Wypadek na A1 pod Kutnem", "Zablokowana autostrada A2").
             - "category": string (jedno z: "fire", "accident", "hazard").
             - "status": string (jedno z: "Trwa akcja", "Opanowane", "Zakończone").
-            - "location": string (Miejscowość i droga/ulica, np. "Kutno, Autostrada A1", "Skierniewice").
+            - "location": string (Miejscowość i droga/ulica, np. "Kutno, Autostrada A1", "Stryków, DK14").
             - "geocode_query": string (Sama nazwa miejscowości do mapy, np. "Kutno, łódzkie" lub "Stryków, łódzkie").
             - "region": string (Województwo lub powiat, np. "łódzkie", "powiat zgierski").
             - "units": string (Siły i Środki, np. "PSP, OSP, ZRM, Policja").
@@ -147,12 +174,10 @@ def run_worker():
                     print(f"   (Odpowiedział model: {model_name})")
                     break
                 except Exception as e:
-                    err_str = str(e)
-                    if "429" in err_str or "RESOURCE_EXHAUSTED" in err_str:
-                        print(f"   ⚠️ Model {model_name} wyczerpał limit (429), przełączam na kolejny...")
+                    if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e):
+                        print(f"   ⚠️ Model {model_name} wyczerpał limit (429), przełączam...")
                         continue
-                    else:
-                        continue
+                    continue
 
             if not response:
                 print("❌ Wszystkie modele wyczerpały aktualny limit!")
@@ -188,17 +213,25 @@ def run_worker():
                     except Exception:
                         pass
 
-                now_pl = datetime.now()
+                inc_title = data.get("title", title)[:120]
+                inc_loc = data.get("location", "Polska")
+                inc_cat = data.get("category", "hazard")
+
+                # SPRAWDZAMY DUPLIKATY Z DZISIAJ
+                if is_duplicate_today(inc_title, inc_loc, inc_cat, lat, lng, today_incidents):
+                    print(f"🔄 Pominięto duplikat (to zdarzenie jest już dzisiaj na mapie): {inc_title} ({inc_loc})")
+                    continue
+
                 insert_data = {
                     "external_id": external_id,
-                    "title": data.get("title", title)[:120],
-                    "category": data.get("category", "hazard"),
+                    "title": inc_title,
+                    "category": inc_cat,
                     "status": data.get("status", "Trwa akcja"),
-                    "location": data.get("location", "Polska"),
+                    "location": inc_loc,
                     "region": data.get("region", "Polska"),
                     "lat": lat,
                     "lng": lng,
-                    "date_str": now_pl.strftime("%Y-%m-%d"),
+                    "date_str": today_str,
                     "time_str": now_pl.strftime("%H:%M"),
                     "units": data.get("units", "PSP, OSP, Policja"),
                     "description": data.get("description", title),
@@ -206,7 +239,8 @@ def run_worker():
                 }
 
                 supabase.table('incidents').insert(insert_data).execute()
-                print(f"✅ SUKCES! Dodano na mapę: {insert_data['title']} ({insert_data['location']})")
+                today_incidents.append(insert_data)
+                print(f"✅ SUKCES! Dodano na mapę: {inc_title} ({inc_loc})")
 
             except Exception as e:
                 print(f"❌ Błąd zapisu: {e}")
