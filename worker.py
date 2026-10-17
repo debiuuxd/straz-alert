@@ -8,7 +8,6 @@ from google import genai
 from google.genai import types
 from supabase import create_client
 
-# Konfiguracja klientów z tajnych kluczy GitHuba
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY") or os.environ.get("SUPABASE_SERVICE_KEY") or os.environ.get("SUPABASE_ANON_KEY")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
@@ -16,43 +15,16 @@ GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 ai_client = genai.Client(api_key=GEMINI_API_KEY)
 
-# Poprawione zapytania z operatorem OR (łapią artykuły z ostatnich 24h)
 RSS_FEEDS = [
-    # 1. Ogólnopolski portal strażacki
     "https://remiza.com.pl/feed/",
-    
-    # 2. Okolice: Stryków, Głowno, Zgierz, Łódź, powiat zgierski
     "https://news.google.com/rss/search?q=(wypadek+OR+po%C5%BCar+OR+stra%C5%BC+OR+kolizja)+(Stryk%C3%B3w+OR+G%C5%82owno+OR+Zgierz+OR+%C5%81%C3%B3d%C5%BA+OR+zgierski)+when:1d&hl=pl&gl=PL&ceid=PL:pl",
-    
-    # 3. Autostrady A1 i A2 oraz drogi w woj. łódzkim
     "https://news.google.com/rss/search?q=(wypadek+OR+po%C5%BCar+OR+zablokowana)+(A1+OR+A2+OR+S8+OR+DK14+OR+%C5%82%C3%B3dzkie)+when:1d&hl=pl&gl=PL&ceid=PL:pl",
-    
-    # 4. Ogólnopolskie akcje straży pożarnej z dzisiaj
     "https://news.google.com/rss/search?q=(stra%C5%BC+po%C5%BCarna+OR+JRG+OR+OSP)+(po%C5%BCar+OR+wypadek)+when:1d&hl=pl&gl=PL&ceid=PL:pl"
 ]
-
-def call_gemini_with_fallback(prompt):
-    models_to_try = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"]
-    last_err = None
-    for model_name in models_to_try:
-        try:
-            return ai_client.models.generate_content(
-                model=model_name,
-                contents=prompt,
-                config=types.GenerateContentConfig(
-                    response_mime_type="application/json",
-                    temperature=0.1
-                )
-            )
-        except Exception as e:
-            last_err = e
-            continue
-    raise last_err
 
 def run_worker():
     print("Rozpoczynam pobieranie wiadomości z wielu źródeł (Kraj + Okolice)...")
     
-    # Poprawione zapytanie do Supabase (czysta składnia Pythona)
     existing_res = supabase.table('incidents').select('external_id').order('created_at', desc=True).limit(300).execute()
     existing_ids = set(r['external_id'] for r in (existing_res.data or []) if r.get('external_id'))
 
@@ -105,7 +77,16 @@ def run_worker():
             """
 
             try:
-                response = call_gemini_with_fallback(prompt)
+                # Używamy bezpośrednio najnowszego, stabilnego modelu Google GenAI
+                response = ai_client.models.generate_content(
+                    model='gemini-2.5-flash',
+                    contents=prompt,
+                    config=types.GenerateContentConfig(
+                        response_mime_type="application/json",
+                        temperature=0.1
+                    )
+                )
+
                 result_text = response.text.strip()
                 if result_text.startswith("```"):
                     result_text = result_text.split("```")[1]
@@ -159,7 +140,7 @@ def run_worker():
                 print(f"✅ SUKCES! Dodano na mapę: {insert_data['title']} ({insert_data['location']})")
 
             except Exception as e:
-                print(f"❌ Błąd analizy lub zapisu: {e}")
+                print(f"❌ Błąd analizy lub zapisu dla '{title[:30]}...': {e}")
 
 if __name__ == "__main__":
     run_worker()
