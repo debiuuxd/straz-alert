@@ -60,6 +60,7 @@ def get_available_models():
     return preferred
 
 def is_duplicate_today(new_title, new_loc, new_cat, new_lat, new_lng, today_incidents):
+    """Sprawdza, czy inna redakcja nie opisała już dzisiaj tego samego zdarzenia."""
     t1 = new_title.lower().strip()
     l1 = new_loc.lower().strip()
 
@@ -68,12 +69,14 @@ def is_duplicate_today(new_title, new_loc, new_cat, new_lat, new_lng, today_inci
         l2 = (inc.get("location") or "").lower().strip()
         cat2 = inc.get("category")
 
+        # 1. Identyczny tytuł lub identyczna lokalizacja w tej samej kategorii
         if t1 == t2 or (l1 == l2 and l1 != "polska" and new_cat == cat2):
             return True
 
+        # 2. Bardzo bliska odległość GPS (ok. 3-4 km) w tej samej kategorii zdarzenia
         if new_cat == cat2 and inc.get("lat") and inc.get("lng"):
             dist = math.hypot(new_lat - float(inc["lat"]), new_lng - float(inc["lng"]))
-            if dist < 0.035:
+            if dist < 0.035: # ~3.5 km w linii prostej
                 return True
 
     return False
@@ -87,10 +90,11 @@ def run_worker():
     now_pl = datetime.now()
     today_str = now_pl.strftime("%Y-%m-%d")
 
+    # Pobieramy ostatnie wpisy do sprawdzenia linków oraz dzisiejsze wpisy do Anty-Duplikatora
     existing_res = supabase.table('incidents').select('external_id, title, location, category, lat, lng, date_str').order('created_at', desc=True).limit(400).execute()
     all_rows = existing_res.data or []
     existing_ids = set(r['external_id'] for r in all_rows if r.get('external_id'))
-    today_incidents = [r for r in all_rows if r.get('date_str'] == today_str]
+    today_incidents = [r for r in all_rows if r.get('date_str') == today_str]
 
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/124.0.0.0 Safari/537.36'}
     ai_calls_this_run = 0
@@ -213,6 +217,7 @@ def run_worker():
                 inc_loc = data.get("location", "Polska")
                 inc_cat = data.get("category", "hazard")
 
+                # SPRAWDZAMY DUPLIKATY Z DZISIAJ
                 if is_duplicate_today(inc_title, inc_loc, inc_cat, lat, lng, today_incidents):
                     print(f"🔄 Pominięto duplikat (to zdarzenie jest już dzisiaj na mapie): {inc_title} ({inc_loc})")
                     continue
@@ -222,4 +227,23 @@ def run_worker():
                     "title": inc_title,
                     "category": inc_cat,
                     "status": data.get("status", "Trwa akcja"),
-                    "location
+                    "location": inc_loc,
+                    "region": data.get("region", "Polska"),
+                    "lat": lat,
+                    "lng": lng,
+                    "date_str": today_str,
+                    "time_str": now_pl.strftime("%H:%M"),
+                    "units": data.get("units", "PSP, OSP, Policja"),
+                    "description": data.get("description", title),
+                    "source_url": link
+                }
+
+                supabase.table('incidents').insert(insert_data).execute()
+                today_incidents.append(insert_data)
+                print(f"✅ SUKCES! Dodano na mapę: {inc_title} ({inc_loc})")
+
+            except Exception as e:
+                print(f"❌ Błąd zapisu: {e}")
+
+if __name__ == "__main__":
+    run_worker()
