@@ -17,16 +17,19 @@ supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 ai_client = genai.Client(api_key=GEMINI_API_KEY)
 
 RSS_FEEDS = [
-    # 1. Okolice: Stryków, Głowno, Zgierz, Łódź, Brzeziny, Łowicz, Kutno, powiat zgierski (PRIORYTET 1)
-    "https://news.google.com/rss/search?q=(wypadek+OR+po%C5%BCar+OR+kolizja+OR+stra%C5%BC)+(Stryk%C3%B3w+OR+G%C5%82owno+OR+Zgierz+OR+%C5%81%C3%B3d%C5%BA+OR+zgierski+OR+Brzeziny)+when:1d&hl=pl&gl=PL&ceid=PL:pl",
+    # 1. DEDYKOWANY KANAŁ: Łowiczanin.info + TuZgierz.pl + TuLodz.pl (dział Na Sygnale!)
+    "https://news.google.com/rss/search?q=(site:lowiczanin.info+OR+site:tuzgierz.pl+OR+site:tulodz.pl)+(stra%C5%BC+OR+po%C5%BCar+OR+wypadek+OR+kolizja+OR+sygnale+OR+interweniowa%C5%82a)+when:1d&hl=pl&gl=PL&ceid=PL:pl",
+
+    # 2. Okolice: Stryków, Głowno, Zgierz, Łódź, Brzeziny, Łowicz, Kutno, powiat zgierski
+    "https://news.google.com/rss/search?q=(wypadek+OR+po%C5%BCar+OR+kolizja+OR+stra%C5%BC)+(Stryk%C3%B3w+OR+G%C5%82owno+OR+Zgierz+OR+%C5%81%C3%B3d%C5%BA+OR+zgierski+OR+%C5%81owicz+OR+Brzeziny)+when:1d&hl=pl&gl=PL&ceid=PL:pl",
     
-    # 2. Autostrady A1 i A2 oraz drogi w woj. łódzkim (PRIORYTET 2)
+    # 3. Autostrady A1 i A2 oraz główne drogi w woj. łódzkim
     "https://news.google.com/rss/search?q=(wypadek+OR+po%C5%BCar+OR+zablokowana+OR+dachowanie)+(A1+OR+A2+OR+S8+OR+DK14+OR+DK92+OR+%C5%82%C3%B3dzkie)+when:1d&hl=pl&gl=PL&ceid=PL:pl",
     
-    # 3. Ogólnopolski portal strażacki
+    # 4. Ogólnopolski portal strażacki Remiza.com.pl
     "https://remiza.com.pl/feed/",
     
-    # 4. Ogólnopolskie akcje straży pożarnej z dzisiaj
+    # 5. Ogólnopolskie akcje straży pożarnej z ostatnich 24h
     "https://news.google.com/rss/search?q=(stra%C5%BC+po%C5%BCarna+OR+JRG+OR+OSP)+(po%C5%BCar+OR+wypadek+OR+zderzenie)+when:1d&hl=pl&gl=PL&ceid=PL:pl"
 ]
 
@@ -35,14 +38,16 @@ IGNORE_WORDS = [
     "odznaczenia", "przetarg", "zakup", "wspomnienie", "rocznica", "pogrzeb", 
     "żegnają", "oddali hołd", "nie żyje komendant", "był zastępcą", "lotto", 
     "losowania", "szczęśliwe liczby", "skrót dnia", "przegląd", "trening", 
-    "szkolenie", "ćwiczenia", "zawody", "turniej", "humbak", "wieloryb", "sekcje zwłok"
+    "szkolenie", "ćwiczenia", "zawody", "turniej", "humbak", "wieloryb", 
+    "sekcje zwłok", "śledztwo po", "prokuratura", "areszt", "zarzuty"
 ]
 
 ACTION_STEMS = [
-    "pożar", "płon", "płomien", "spłon", "ogień", "ogni", "wypadk", "wypadek", 
-    "kolizj", "zderz", "dachowa", "potrąc", "zablokow", "utrudnieni", "akcj", 
-    "zastęp", "straż", "uderz", "wjechał", "wyciek", "plam", "drzew", "ewakuac", 
-    "przewróc", "lawet", "karambol", "rann", "poszkodowan", "śmierteln", "runął", "tragedi"
+    "pożar", "płon", "płomien", "spłon", "ogień", "ogni", "zadymien", "czad", "gaz",
+    "wypadk", "wypadek", "kolizj", "zderz", "dachowa", "potrąc", "zablokow", 
+    "utrudnieni", "akcj", "zastęp", "straż", "interwenc", "interweniowa", "uderz", 
+    "wjechał", "wyciek", "plam", "drzew", "ewakuac", "przewróc", "lawet", 
+    "karambol", "rann", "poszkodowan", "śmierteln", "runął", "tragedi"
 ]
 
 def get_available_models():
@@ -59,30 +64,38 @@ def get_available_models():
         print(f"Info o liście modeli: {e}")
     return preferred
 
-def is_duplicate_today(new_title, new_loc, new_cat, new_lat, new_lng, today_incidents):
-    """Sprawdza, czy inna redakcja nie opisała już dzisiaj tego samego zdarzenia."""
+def is_duplicate_recent(new_title, new_loc, new_cat, new_lat, new_lng, recent_incidents):
+    """Sprawdza duplikaty we wszystkich ostatnich zdarzeniach (także sprzed północy!)."""
     t1 = new_title.lower().strip()
     l1 = new_loc.lower().strip()
+    words1 = set(w for w in t1.replace(",", " ").replace("-", " ").split() if len(w) > 3)
 
-    for inc in today_incidents:
+    for inc in recent_incidents:
         t2 = (inc.get("title") or "").lower().strip()
         l2 = (inc.get("location") or "").lower().strip()
         cat2 = inc.get("category")
 
-        # 1. Identyczny tytuł lub identyczna lokalizacja w tej samej kategorii
-        if t1 == t2 or (l1 == l2 and l1 != "polska" and new_cat == cat2):
+        # 1. Identyczny tytuł lub ta sama miejscowość
+        if t1 == t2:
+            return True
+        if l1 == l2 and l1 not in ["polska", "łódzkie"]:
             return True
 
-        # 2. Bardzo bliska odległość GPS (ok. 3-4 km) w tej samej kategorii zdarzenia
-        if new_cat == cat2 and inc.get("lat") and inc.get("lng"):
+        # 2. Podobieństwo słów w tytule (np. "Tragiczny pożar w Nisku" vs "Pożar magazynu w Nisku")
+        words2 = set(w for w in t2.replace(",", " ").replace("-", " ").split() if len(w) > 3)
+        if len(words1 & words2) >= 2 and (l1 in l2 or l2 in l1):
+            return True
+
+        # 3. Bliska odległość GPS (~4 km) - niezależnie od dnia, jeśli to ten sam typ lub głośne miejsce
+        if inc.get("lat") and inc.get("lng"):
             dist = math.hypot(new_lat - float(inc["lat"]), new_lng - float(inc["lng"]))
-            if dist < 0.035: # ~3.5 km w linii prostej
+            if dist < 0.038 and (new_cat == cat2 or l1 == l2):
                 return True
 
     return False
 
 def run_worker():
-    print("Rozpoczynam inteligentne skanowanie (z Anty-Duplikatorem)...")
+    print("Rozpoczynam inteligentne skanowanie (Łowiczanin + Anty-Duplikator 72h)...")
     
     available_models = get_available_models()
     print(f"Kolejność modeli AI: {available_models[:4]}")
@@ -90,11 +103,16 @@ def run_worker():
     now_pl = datetime.now()
     today_str = now_pl.strftime("%Y-%m-%d")
 
-    # Pobieramy ostatnie wpisy do sprawdzenia linków oraz dzisiejsze wpisy do Anty-Duplikatora
+    # Pobieramy ostatnie wpisy z bazy (obejmuje dzisiejsze i z poprzednich dni!)
     existing_res = supabase.table('incidents').select('external_id, title, location, category, lat, lng, date_str').order('created_at', desc=True).limit(400).execute()
     all_rows = existing_res.data or []
     existing_ids = set(r['external_id'] for r in all_rows if r.get('external_id'))
-    today_incidents = [r for r in all_rows if r.get('date_str') == today_str]
+    
+    # Ostatnie 45 zdarzeń z bazy (z dzisiaj, wczoraj i przedwczoraj) do blokowania powtórek po północy
+    recent_incidents = all_rows[:45]
+    recent_summary_for_ai = "\n".join(
+        [f"- {r.get('title')} ({r.get('location')}, data: {r.get('date_str')})" for r in all_rows[:30]]
+    )
 
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/124.0.0.0 Safari/537.36'}
     ai_calls_this_run = 0
@@ -105,7 +123,7 @@ def run_worker():
             print("Osiągnięto limit 5 analiz w tym cyklu.")
             break
 
-        print(f"\nSkanuję źródło: {feed_url[:65]}...")
+        print(f"\nSkanuję źródło: {feed_url[:68]}...")
         try:
             req = urllib.request.Request(feed_url, headers=headers)
             with urllib.request.urlopen(req, timeout=15) as resp:
@@ -145,18 +163,24 @@ def run_worker():
             Tytuł: {title}
             Treść: {summary}
 
+            UWAGA - OTO LISTA ZDARZEŃ, KTÓRE JUŻ MAMY W BAZIE Z OSTATNICH DNI:
+            {recent_summary_for_ai}
+
+            BARDZO WAŻNA ZASADA ANTY-DUPLIKATOWA:
+            Jeśli ten artykuł opisuje zdarzenie, które JUŻ ZNAJDUJE SIĘ na powyższej liście (np. kolejna relacja o pożarze w Nisku, wypadku szybowca w Pruszczu Gdańskim, przewróconej lawecie na A2 itp., albo aktualizacja po dniach), MUSISZ ustawić "is_incident": false!
+
             Zwróć wynik WYŁĄCZNIE jako czysty obiekt JSON:
-            - "is_incident": boolean (true tylko jeśli to konkretny pożar, wypadek, kolizja lub akcja służb w Polsce; false jeśli to zagranica, felieton, śledztwo po dniach lub statystyka).
-            - "title": string (Krótki tytuł meldunku po polsku, np. "Wypadek na A1 pod Kutnem", "Zablokowana autostrada A2").
+            - "is_incident": boolean (true TYLKO jeśli to NOWE zdarzenie ratownicze w Polsce, którego nie ma jeszcze na powyższej liście; false jeśli to duplikat z listy, stare zdarzenie sprzed dni lub felieton).
+            - "title": string (Krótki tytuł meldunku po polsku, np. "Wyciek gazu przy ul. Tuszewskiej w Łowiczu", "Wypadek na A1 pod Kutnem").
             - "category": string (jedno z: "fire", "accident", "hazard").
             - "status": string (jedno z: "Trwa akcja", "Opanowane", "Zakończone").
-            - "location": string (Miejscowość i droga/ulica, np. "Kutno, Autostrada A1", "Stryków, DK14").
-            - "geocode_query": string (Sama nazwa miejscowości do mapy, np. "Kutno, łódzkie" lub "Stryków, łódzkie").
-            - "region": string (Województwo lub powiat, np. "łódzkie", "powiat zgierski").
-            - "units": string (Siły i Środki, np. "PSP, OSP, ZRM, Policja").
+            - "location": string (Miejscowość i droga/ulica, np. "Łowicz, ul. Tuszewska", "Stryków, DK14").
+            - "geocode_query": string (Sama nazwa miejscowości i województwa do mapy, np. "Łowicz, łódzkie" lub "Stryków, łódzkie").
+            - "region": string (Województwo lub powiat, np. "powiat łowicki", "powiat zgierski", "łódzkie").
+            - "units": string (Siły i Środki, np. "JRG Łowicz, OSP, Policja").
             - "description": string (Krótki opis 1-2 zdania po polsku).
-            - "estimated_lat": number (Szerokość GPS w Polsce, np. 51.95).
-            - "estimated_lng": number (Długość GPS w Polsce, np. 19.45).
+            - "estimated_lat": number (Szerokość GPS w Polsce, np. 52.10).
+            - "estimated_lng": number (Długość GPS w Polsce, np. 19.94).
             """
 
             response = None
@@ -194,7 +218,7 @@ def run_worker():
                 existing_ids.add(external_id)
 
                 if not data.get("is_incident", False):
-                    print("-> AI uznało, że to nie jest bieżąca akcja w Polsce.")
+                    print("-> AI odrzuciło (duplikat z poprzednich dni lub brak nowej akcji).")
                     continue
 
                 lat = float(data.get("estimated_lat") or 51.90)
@@ -217,9 +241,8 @@ def run_worker():
                 inc_loc = data.get("location", "Polska")
                 inc_cat = data.get("category", "hazard")
 
-                # SPRAWDZAMY DUPLIKATY Z DZISIAJ
-                if is_duplicate_today(inc_title, inc_loc, inc_cat, lat, lng, today_incidents):
-                    print(f"🔄 Pominięto duplikat (to zdarzenie jest już dzisiaj na mapie): {inc_title} ({inc_loc})")
+                if is_duplicate_recent(inc_title, inc_loc, inc_cat, lat, lng, recent_incidents):
+                    print(f"🔄 Anty-Duplikator 72h zablokował powtórkę: {inc_title} ({inc_loc})")
                     continue
 
                 insert_data = {
@@ -239,7 +262,7 @@ def run_worker():
                 }
 
                 supabase.table('incidents').insert(insert_data).execute()
-                today_incidents.append(insert_data)
+                recent_incidents.insert(0, insert_data)
                 print(f"✅ SUKCES! Dodano na mapę: {inc_title} ({inc_loc})")
 
             except Exception as e:
