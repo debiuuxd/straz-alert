@@ -84,7 +84,7 @@
     </div>
   </div>
 
-  <!-- GÓRNY PANEL (Z bezpiecznym odstępem pod iPhone / iOS notch!) -->
+  <!-- GÓRNY PANEL -->
   <div style="z-index: 40;" class="fixed top-0 left-0 right-0 pointer-events-none flex flex-col bg-slate-950/95 pt-[env(safe-area-inset-top)]">
     
     <header class="min-h-[56px] py-1.5 backdrop-blur-md border-b border-slate-800/80 px-2.5 sm:px-4 flex items-center justify-between gap-2 pointer-events-auto shadow-lg">
@@ -326,6 +326,14 @@
           <div id="pref-check-local" class="w-5 h-5 rounded-full border flex items-center justify-center"></div>
         </button>
 
+        <button id="btn-wake-lock" class="w-full text-left p-3.5 rounded-2xl bg-slate-950 border border-slate-800 transition-all flex items-center justify-between">
+          <div>
+            <div class="font-tech font-bold text-sm text-emerald-400">⚡ Tryb Dyspozytora (Nie wygaszaj ekranu)</div>
+            <div class="text-[11px] text-slate-400 mt-0.5">Zapobiega usypianiu telefonu, gdy aplikacja jest otwarta</div>
+          </div>
+          <span id="wake-lock-status" class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-slate-800 text-slate-300">WYŁ</span>
+        </button>
+
         <div class="grid grid-cols-2 gap-2 pt-1">
           <button id="btn-test-sound-modal" class="py-2.5 px-3 rounded-2xl bg-slate-950 border border-amber-500/40 text-amber-400 font-tech font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 active:scale-95 transition-all">
             <i data-lucide="bell-ring" class="w-4 h-4"></i> Test Syreny
@@ -337,10 +345,10 @@
 
         <div class="p-3.5 rounded-2xl bg-slate-950 border border-slate-800 space-y-1.5">
           <div class="font-tech font-bold text-xs text-emerald-400 uppercase flex items-center gap-1.5">
-            <i data-lucide="bell" class="w-4 h-4"></i> Status powiadomień na telefonie: <span id="push-perm-status" class="text-white">Sprawdzanie...</span>
+            <i data-lucide="bell" class="w-4 h-4"></i> Status powiadomień: <span id="push-perm-status" class="text-white">Sprawdzanie...</span>
           </div>
           <p class="text-[11px] text-slate-300 leading-relaxed">
-            Kliknij powyżej <strong>„Test Powiadomienia”</strong> i zezwól przeglądarce na powiadomienia. Aby telefon odbierał alarmy bez usypiania karty w tle, w ustawieniach aplikacji Chrome wybierz dla baterii opcję <strong>„Bez ograniczeń”</strong>.
+            Aplikacja skanuje bazę na żywo (WebSocket + co 20 sek.). Gdy dodasz wpis na PC, telefon automatycznie wykryje nowe ID zgłoszenia i uruchomi alarm!
           </p>
         </div>
       </div>
@@ -424,7 +432,7 @@
     <div id="incidents-list" class="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar"></div>
   </div>
 
-  <!-- MODAL: KARTA SZCZEGÓŁÓW (Z PRZYCISKIEM USUWANIA ZGŁOSZENIA!) -->
+  <!-- MODAL: KARTA SZCZEGÓŁÓW -->
   <div id="details-modal" style="display: none; z-index: 99999;" class="fixed inset-0 bg-black/80 backdrop-blur-sm items-end sm:items-center justify-center p-0 sm:p-4">
     <div class="bg-slate-900 border border-slate-700/80 w-full max-w-lg rounded-t-3xl sm:rounded-2xl p-5 shadow-2xl max-h-[85vh] overflow-y-auto custom-scrollbar">
       <div class="flex items-center justify-between border-b border-slate-800 pb-3 mb-4">
@@ -530,6 +538,7 @@
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNtamxlYnRxd3l5cGx3ZGNrbHpuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIxNTk5OTksImV4cCI6MjEwNzczNTk5OX0.YczVUJnRBcjMBdaKzgQij7MENxN6vDWfe8Btt2sP5-c';
 
     let swRegistration = null;
+    let wakeLockSentinel = null;
 
     (function setupPWA() {
       const manifest = {
@@ -568,6 +577,7 @@
     let mapStyleIndex = parseInt(localStorage.getItem('straz_map_style') || '1', 10);
     let alertPrefMode = localStorage.getItem('straz_alert_pref') || 'all';
     let incidents = [];
+    let highestSeenId = null;
     let activeCategory = 'all';
     let searchQuery = '';
     
@@ -935,7 +945,6 @@
       return dist < 0.65;
     }
 
-    // FUNKCJA USUWANIA ZGŁOSZENIA Z BAZY I MAPY
     window.deleteIncident = async function(id, event) {
       if (event) event.stopPropagation();
       const item = incidents.find(x => x.id == id);
@@ -1246,7 +1255,7 @@
       document.getElementById(id).style.display = 'none';
     }
 
-    async function loadIncidentsFromSupabase() {
+    async function loadIncidentsFromSupabase(triggerAlertOnNew = false) {
       const icon = document.getElementById('refresh-icon');
       icon.classList.add('animate-spin');
       try {
@@ -1257,12 +1266,12 @@
         const { data, error } = await supabaseClient
           .from('incidents')
           .select('*')
-          .order('created_at', { ascending: false })
+          .order('id', { ascending: false })
           .limit(300);
 
         if (!error && data) {
-          incidents = data.map(r => ({
-            id: r.id,
+          const mapped = data.map(r => ({
+            id: Number(r.id),
             externalId: r.external_id || '',
             title: r.title,
             category: r.category || 'hazard',
@@ -1277,6 +1286,22 @@
             desc: r.description,
             sourceUrl: r.source_url
           }));
+
+          if (triggerAlertOnNew && highestSeenId !== null && mapped.length > 0) {
+            const brandNew = mapped.filter(x => x.id > highestSeenId);
+            if (brandNew.length > 0) {
+              highestSeenId = mapped[0].id;
+              incidents = mapped;
+              renderAll();
+              showToast(brandNew[0]);
+              return;
+            }
+          }
+
+          if (mapped.length > 0) {
+            highestSeenId = Math.max(highestSeenId || 0, mapped[0].id);
+          }
+          incidents = mapped;
           renderAll();
         }
       } catch (err) {
@@ -1292,9 +1317,11 @@
         .channel('public:incidents')
         .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'incidents' }, payload => {
           const r = payload.new;
-          if (incidents.some(x => x.id == r.id)) return;
+          const newId = Number(r.id);
+          if (incidents.some(x => x.id === newId)) return;
+          highestSeenId = Math.max(highestSeenId || 0, newId);
           const newItem = {
-            id: r.id,
+            id: newId,
             externalId: r.external_id || '',
             title: r.title,
             category: r.category || 'hazard',
@@ -1323,10 +1350,14 @@
         .subscribe();
     }
 
-    // Automatyczne odświeżanie gdy odblokujesz telefon i wrócisz do aplikacji
+    // Automatyczne sprawdzanie co 20 sekund (gdyby WebSocket na telefonie zasnął)
+    setInterval(() => {
+      loadIncidentsFromSupabase(true);
+    }, 20000);
+
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'visible') {
-        loadIncidentsFromSupabase();
+        loadIncidentsFromSupabase(true);
       }
     });
 
@@ -1335,7 +1366,7 @@
       initMap();
       updateDateUI();
       renderSettingsModal();
-      loadIncidentsFromSupabase().then(() => subscribeRealtime());
+      loadIncidentsFromSupabase(false).then(() => subscribeRealtime());
       fetchWeatherAndIMGW();
 
       const searchInput = document.getElementById('search-input');
@@ -1368,6 +1399,28 @@
       document.getElementById('btn-settings').addEventListener('click', () => {
         renderSettingsModal();
         document.getElementById('settings-modal').style.display = 'flex';
+      });
+
+      // Przełącznik Wake Lock (Nie wygaszaj ekranu na telefonie)
+      document.getElementById('btn-wake-lock').addEventListener('click', async () => {
+        const badge = document.getElementById('wake-lock-status');
+        if (!('wakeLock' in navigator)) {
+          return alert('Twoja przeglądarka nie obsługuje blokady wygaszania ekranu.');
+        }
+        try {
+          if (wakeLockSentinel) {
+            await wakeLockSentinel.release();
+            wakeLockSentinel = null;
+            badge.innerText = 'WYŁ';
+            badge.className = 'px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-slate-800 text-slate-300';
+          } else {
+            wakeLockSentinel = await navigator.wakeLock.request('screen');
+            badge.innerText = 'AKTYWNY ⚡';
+            badge.className = 'px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-600 text-white';
+          }
+        } catch (err) {
+          console.warn(err);
+        }
       });
 
       const triggerTestSound = () => {
@@ -1473,7 +1526,7 @@
       });
 
       document.getElementById('btn-refresh').addEventListener('click', () => {
-        loadIncidentsFromSupabase();
+        loadIncidentsFromSupabase(true);
         fetchWeatherAndIMGW();
       });
 
@@ -1520,7 +1573,7 @@
         } catch (err) {}
 
         if (supabaseClient) {
-          await supabaseClient.from('incidents').insert([{
+          const { data: inserted } = await supabaseClient.from('incidents').insert([{
             external_id: 'manual-' + Date.now(),
             title: title,
             category: cat,
@@ -1533,14 +1586,18 @@
             time_str: new Date().toTimeString().slice(0, 5),
             units: units,
             description: desc
-          }]);
+          }]).select();
+
+          if (inserted && inserted[0]) {
+            highestSeenId = Math.max(highestSeenId || 0, Number(inserted[0].id));
+          }
         }
 
         closeModal('add-modal');
         e.target.reset();
         btn.innerText = 'Wyślij alarm na mapę';
         btn.disabled = false;
-        loadIncidentsFromSupabase();
+        loadIncidentsFromSupabase(false);
       });
     });
   </script>
