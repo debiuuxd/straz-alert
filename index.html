@@ -8,6 +8,8 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Straż Alert">
+  <link id="pwa-manifest" rel="manifest" href="">
   
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://cdn.tailwindcss.com"></script>
@@ -26,13 +28,11 @@
     
     #map { position: absolute; top: 0; left: 0; right: 0; bottom: 0; width: 100%; height: 100%; z-index: 10; background: #090a0f; }
     
-    /* 1. Filtr Ciemny Nocny HD (kolorowe drogi, ciemne tło, wszystkie wsie) */
-    .map-dark-filter .leaflet-tile-pane {
+    /* Filtry nakładane wyłącznie na warstwę bazową dróg (dzięki temu radar chmur zachowuje prawdziwe kolory!) */
+    .map-dark-filter .base-map-tiles {
       filter: invert(100%) hue-rotate(180deg) brightness(95%) contrast(90%);
     }
-
-    /* 2. Filtr Czarna Taktyczna OLED (smolista czerń, wysoki kontrast, zero kluczy API!) */
-    .map-oled-filter .leaflet-tile-pane {
+    .map-oled-filter .base-map-tiles {
       filter: invert(100%) grayscale(100%) brightness(75%) contrast(155%);
     }
     
@@ -83,11 +83,11 @@
     </div>
   </div>
 
-  <!-- GÓRNY PANEL: NAGŁÓWEK + WYSZUKIWARKA + FILTRY -->
+  <!-- GÓRNY PANEL: NAGŁÓWEK + WYSZUKIWARKA + FILTRY + PASEK IMGW -->
   <div style="z-index: 40;" class="fixed top-0 left-0 right-0 pointer-events-none flex flex-col">
     
-    <header class="h-14 bg-slate-950/90 backdrop-blur-md border-b border-slate-800/80 px-3.5 flex items-center justify-between pointer-events-auto shadow-lg">
-      <div class="flex items-center gap-2.5">
+    <header class="h-14 bg-slate-950/90 backdrop-blur-md border-b border-slate-800/80 px-3 flex items-center justify-between pointer-events-auto shadow-lg">
+      <div class="flex items-center gap-2">
         <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-red-600 to-amber-600 flex items-center justify-center shadow-md shadow-red-600/30 border border-red-400/40">
           <i data-lucide="flame" class="w-5 h-5 text-white"></i>
         </div>
@@ -97,23 +97,31 @@
             <span class="px-1.5 py-0.2 text-[9px] font-mono font-bold bg-red-500/20 text-red-400 border border-red-500/40 rounded">LIVE</span>
           </div>
           <p class="text-[10px] text-slate-400 font-mono tracking-tight flex items-center gap-1">
-            <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> MONITORING POLSKA 24/7
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+            <span id="monitoring-mode-label">MONITORING POLSKA 24/7</span>
           </p>
         </div>
       </div>
 
-      <div class="flex items-center gap-1.5">
-        <button id="btn-test-sound" title="Przetestuj dźwięk alarmu DSP" class="h-9 px-2.5 rounded-xl bg-slate-900 border border-slate-700/80 text-amber-400 text-[11px] font-mono font-bold flex items-center gap-1 active:scale-95 transition-all">
+      <div class="flex items-center gap-1">
+        <button id="btn-weather-modal" title="Status Pogodowy IMGW / Warunki w okolicy" class="h-9 px-2 rounded-xl bg-slate-900 border border-slate-700/80 text-sky-400 text-[11px] font-mono font-bold flex items-center gap-1 active:scale-95 transition-all">
+          <i data-lucide="cloud-lightning" class="w-4 h-4"></i>
+          <span id="header-temp" class="hidden sm:inline">--°C</span>
+        </button>
+        <button id="btn-test-sound" title="Przetestuj dźwięk alarmu DSP" class="h-9 px-2 rounded-xl bg-slate-900 border border-slate-700/80 text-amber-400 text-[11px] font-mono font-bold flex items-center gap-1 active:scale-95 transition-all">
           <i data-lucide="bell-ring" class="w-3.5 h-3.5"></i>
-          <span class="hidden sm:inline">TEST DSP</span>
+          <span class="hidden md:inline">DSP</span>
         </button>
         <button id="btn-sound-toggle" title="Włącz/Wyłącz dźwięk" class="h-9 w-9 rounded-xl bg-slate-900 border border-slate-700/80 text-emerald-400 flex items-center justify-center active:scale-95 transition-all">
           <i data-lucide="volume-2" class="w-4 h-4" id="sound-icon"></i>
         </button>
+        <button id="btn-settings" title="Ustawienia powiadomień i aplikacji PWA" class="h-9 w-9 rounded-xl bg-slate-900 border border-slate-700/80 text-slate-300 flex items-center justify-center active:scale-95 transition-all">
+          <i data-lucide="sliders-horizontal" class="w-4 h-4"></i>
+        </button>
         <button id="btn-refresh" title="Odśwież bazę" class="h-9 w-9 rounded-xl bg-slate-900 border border-slate-700/80 text-slate-300 flex items-center justify-center active:scale-95 transition-all">
           <i data-lucide="refresh-cw" class="w-4 h-4" id="refresh-icon"></i>
         </button>
-        <button id="btn-toggle-incidents" class="h-9 px-3 rounded-xl bg-slate-900 border border-slate-700/80 text-slate-100 text-xs font-medium flex items-center gap-1.5 active:scale-95 transition-all">
+        <button id="btn-toggle-incidents" class="h-9 px-2.5 rounded-xl bg-slate-900 border border-slate-700/80 text-slate-100 text-xs font-medium flex items-center gap-1 active:scale-95 transition-all">
           <i data-lucide="list" class="w-4 h-4 text-red-400"></i>
           <span id="header-counter" class="bg-red-500/20 text-red-400 font-mono text-[11px] px-1.5 py-0.5 rounded-full font-bold">0</span>
         </button>
@@ -160,6 +168,32 @@
             <span id="count-hazard" class="text-[10px] font-mono opacity-80">(0)</span>
           </button>
         </div>
+
+        <!-- PASEK OSTRZEŻEŃ IMGW / METEO (Pokazuje się automatycznie tylko gdy jest aktywne ostrzeżenie!) -->
+        <div id="imgw-alert-banner" style="display: none;" class="w-full rounded-xl p-2.5 border backdrop-blur-md shadow-lg cursor-pointer transition-all active:scale-[0.99]">
+          <div class="flex items-center justify-between gap-2">
+            <div class="flex items-center gap-2 min-w-0">
+              <span id="imgw-banner-badge" class="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold uppercase flex-shrink-0">IMGW</span>
+              <span id="imgw-banner-text" class="text-xs font-tech font-bold text-white truncate"></span>
+            </div>
+            <div class="flex items-center gap-1 text-[10px] font-mono text-slate-200 flex-shrink-0">
+              <span>Szczegóły</span>
+              <i data-lucide="chevron-right" class="w-3.5 h-3.5"></i>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- PIGUŁKA INFORMACYJNA RADARU OPADÓW NA ŻYWO -->
+  <div id="radar-status-pill" style="display: none; z-index: 35;" class="fixed bottom-20 left-3 bg-slate-900/95 border border-sky-500/60 rounded-2xl px-3 py-2 shadow-xl backdrop-blur-md pointer-events-auto">
+    <div class="flex items-center gap-2">
+      <span class="w-2 h-2 rounded-full bg-sky-400 animate-ping"></span>
+      <div>
+        <div class="text-[10px] font-mono font-bold text-sky-400 uppercase">RADAR OPADÓW I BURZ LIVE</div>
+        <div id="radar-time-label" class="text-[10px] text-slate-300 font-mono">Pomiar: aktualny</div>
       </div>
     </div>
   </div>
@@ -169,13 +203,16 @@
 
   <!-- BOCZNE PRZYCISKI NA MAPIE -->
   <div style="z-index: 35;" class="fixed right-3 bottom-20 flex flex-col gap-2.5 pointer-events-auto">
+    <button id="btn-weather-radar" title="Włącz/Wyłącz żywy radar opadów i burz na mapie" class="w-11 h-11 rounded-2xl bg-slate-900/95 border border-slate-700 text-slate-100 shadow-xl flex items-center justify-center active:scale-95 transition-all">
+      <i data-lucide="cloud-rain" class="w-5 h-5 text-sky-400"></i>
+    </button>
     <button id="btn-map-style" title="Wybierz motyw mapy (Jasna / Ciemna / Satelita)" class="w-11 h-11 rounded-2xl bg-slate-900/95 border border-slate-700 text-slate-100 shadow-xl flex items-center justify-center active:scale-95 transition-transform">
-      <i data-lucide="layers" class="w-5 h-5 text-sky-400"></i>
+      <i data-lucide="layers" class="w-5 h-5 text-indigo-400"></i>
     </button>
     <button id="btn-locate-me" title="Pokaż moją lokalizację" class="w-11 h-11 rounded-2xl bg-slate-900/95 border border-slate-700 text-slate-100 shadow-xl flex items-center justify-center active:scale-95 transition-transform">
       <i data-lucide="locate-fixed" class="w-5 h-5 text-emerald-400"></i>
     </button>
-    <button id="btn-reset-poland" title="Widok na całą Polskę" class="w-11 h-11 rounded-2xl bg-slate-900/95 border border-slate-700 text-slate-100 shadow-xl flex items-center justify-center active:scale-95 transition-transform">
+    <button id="btn-reset-poland" title="Widok na całą Polskę / Okolice Łodzi" class="w-11 h-11 rounded-2xl bg-slate-900/95 border border-slate-700 text-slate-100 shadow-xl flex items-center justify-center active:scale-95 transition-transform">
       <i data-lucide="maximize-2" class="w-5 h-5 text-amber-400"></i>
     </button>
     <button id="btn-add-incident" title="Zgłoś nowe zdarzenie ręcznie" class="w-11 h-11 rounded-2xl bg-red-600 hover:bg-red-500 border border-red-400 text-white shadow-xl shadow-red-600/30 flex items-center justify-center active:scale-95 transition-transform">
@@ -193,6 +230,10 @@
       <i data-lucide="flame" class="w-5 h-5"></i>
       <span class="text-[10px] font-bold font-tech mt-1">Lista Meldunków</span>
     </button>
+    <button id="nav-btn-weather" class="flex flex-col items-center justify-center flex-1 py-1 text-slate-400 hover:text-slate-200">
+      <i data-lucide="cloud-lightning" class="w-5 h-5"></i>
+      <span class="text-[10px] font-bold font-tech mt-1">Alerty IMGW</span>
+    </button>
     <button id="nav-btn-calendar" class="flex flex-col items-center justify-center flex-1 py-1 text-slate-400 hover:text-slate-200">
       <i data-lucide="calendar-days" class="w-5 h-5"></i>
       <span class="text-[10px] font-bold font-tech mt-1">Kalendarz</span>
@@ -202,6 +243,104 @@
       <span class="text-[10px] font-bold font-tech mt-1">Słownik SiŚ</span>
     </button>
   </nav>
+
+  <!-- MODAL: OSTRZEŻENIA IMGW I WARUNKI METEO W OKOLICY -->
+  <div id="weather-modal" style="display: none; z-index: 99999;" class="fixed inset-0 bg-black/80 backdrop-blur-sm items-end sm:items-center justify-center p-0 sm:p-4">
+    <div class="bg-slate-900 border border-slate-700/90 w-full max-w-lg rounded-t-3xl sm:rounded-3xl p-5 shadow-2xl max-h-[85vh] overflow-y-auto custom-scrollbar">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3 mb-4">
+        <div class="flex items-center gap-2">
+          <i data-lucide="cloud-lightning" class="w-5 h-5 text-amber-400"></i>
+          <h3 class="font-tech text-base font-bold text-white uppercase tracking-wider">Centrum Meteo • IMGW & Radar</h3>
+        </div>
+        <button onclick="closeModal('weather-modal')" class="text-slate-400 hover:text-white p-1">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <!-- Bieżące parametry pogodowe w rejonie Stryków / Zgierz / Łódź -->
+      <div class="bg-slate-950/90 border border-slate-800 rounded-2xl p-3.5 mb-4">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-[11px] font-mono text-sky-400 uppercase font-bold">📍 Rejon operacyjny: Stryków / Zgierz / Łódź</span>
+          <span id="meteo-live-time" class="text-[10px] font-mono text-slate-400">Aktualizacja LIVE</span>
+        </div>
+        <div class="grid grid-cols-3 gap-2 text-center">
+          <div class="bg-slate-900/90 p-2.5 rounded-xl border border-slate-800/80">
+            <div class="text-[10px] text-slate-400 font-mono">Temperatura</div>
+            <div id="meteo-temp" class="font-tech font-bold text-base text-white mt-0.5">--°C</div>
+          </div>
+          <div class="bg-slate-900/90 p-2.5 rounded-xl border border-slate-800/80">
+            <div class="text-[10px] text-slate-400 font-mono">Wiatr stały</div>
+            <div id="meteo-wind" class="font-tech font-bold text-base text-emerald-400 mt-0.5">-- km/h</div>
+          </div>
+          <div class="bg-slate-900/90 p-2.5 rounded-xl border border-slate-800/80">
+            <div class="text-[10px] text-slate-400 font-mono">Porywy wiatru</div>
+            <div id="meteo-gusts" class="font-tech font-bold text-base text-amber-400 mt-0.5">-- km/h</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="flex items-center justify-between mb-2">
+        <span class="text-xs font-mono uppercase text-slate-400 font-bold">Aktywne ostrzeżenia meteorologiczne:</span>
+        <button id="btn-modal-toggle-radar" class="text-xs font-tech font-bold text-sky-400 hover:underline flex items-center gap-1">
+          <i data-lucide="radar" class="w-3.5 h-3.5"></i> Przełącz radar chmur na mapie
+        </button>
+      </div>
+
+      <div id="imgw-warnings-list" class="space-y-3 mb-4"></div>
+
+      <button onclick="closeModal('weather-modal')" class="w-full py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-tech font-bold text-xs uppercase tracking-wider">
+        Zamknij okno meteo
+      </button>
+    </div>
+  </div>
+
+  <!-- MODAL: USTAWIENIA POWIADOMIEŃ REGIONALNYCH I PWA -->
+  <div id="settings-modal" style="display: none; z-index: 99999;" class="fixed inset-0 bg-black/80 backdrop-blur-sm items-end sm:items-center justify-center p-0 sm:p-4">
+    <div class="bg-slate-900 border border-slate-700/90 w-full max-w-md rounded-t-3xl sm:rounded-3xl p-5 shadow-2xl">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3 mb-4">
+        <div class="flex items-center gap-2">
+          <i data-lucide="sliders-horizontal" class="w-5 h-5 text-red-400"></i>
+          <h3 class="font-tech text-base font-bold text-white uppercase tracking-wider">Ustawienia Alarmu i Telefonu</h3>
+        </div>
+        <button onclick="closeModal('settings-modal')" class="text-slate-400 hover:text-white p-1">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <div class="space-y-3 mb-5">
+        <div class="text-xs font-mono text-slate-400 uppercase font-bold">Kiedy ma wyć syrena DSP i powiadomienia?</div>
+        
+        <button id="pref-mode-all" onclick="window.setAlertPref('all')" class="w-full text-left p-3.5 rounded-2xl border transition-all flex items-center justify-between">
+          <div>
+            <div class="font-tech font-bold text-sm text-white">🇵🇱 Wszystkie wyjazdy z całej Polski</div>
+            <div class="text-[11px] text-slate-400 mt-0.5">Syrena odzywa się przy każdym nowym zdarzeniu w kraju</div>
+          </div>
+          <div id="pref-check-all" class="w-5 h-5 rounded-full border flex items-center justify-center"></div>
+        </button>
+
+        <button id="pref-mode-local" onclick="window.setAlertPref('local')" class="w-full text-left p-3.5 rounded-2xl border transition-all flex items-center justify-between">
+          <div>
+            <div class="font-tech font-bold text-sm text-white">📍 Tylko moja okolica (Stryków / Łódź / A1 / A2)</div>
+            <div class="text-[11px] text-slate-400 mt-0.5">Syrena wyje dla woj. łódzkiego (Zgierz, Głowno, Łowicz, Kutno, Łódź) oraz dużych katastrof</div>
+          </div>
+          <div id="pref-check-local" class="w-5 h-5 rounded-full border flex items-center justify-center"></div>
+        </button>
+
+        <div class="p-3.5 rounded-2xl bg-slate-950 border border-slate-800 space-y-2">
+          <div class="font-tech font-bold text-xs text-amber-400 uppercase flex items-center gap-1.5">
+            <i data-lucide="smartphone" class="w-4 h-4"></i> Jak zainstalować jako aplikację na telefonie?
+          </div>
+          <p class="text-[11px] text-slate-300 leading-relaxed">
+            W przeglądarce <strong>Chrome na telefonie</strong> dotknij trzech kropek <strong class="text-white">(⋮)</strong> w prawym górnym rogu i wybierz <strong>„Dodaj do ekranu głównego” / „Zainstaluj aplikację”</strong>. Ikona Straż Alert pojawi się na pulpicie telefonu i będzie działać na pełnym ekranie!
+          </p>
+        </div>
+      </div>
+
+      <button onclick="closeModal('settings-modal')" class="w-full py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-tech font-bold text-xs uppercase tracking-wider">
+        Gotowe
+      </button>
+    </div>
+  </div>
 
   <!-- MODAL: WYBÓR MOTYWU MAPY -->
   <div id="map-style-modal" style="display: none; z-index: 99999;" class="fixed inset-0 bg-black/80 backdrop-blur-sm items-center justify-center p-4">
@@ -375,7 +514,26 @@
   <script>
     // TWOJE DANE POŁĄCZENIA Z SUPABASE
     const SUPABASE_URL = 'https://cmjlebtqwyyplwdcklzn.supabase.co';
-    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNtamxlYnRxd3l5cGx3ZGNrbHpuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIxNTk5OTksImV4cCI6MjEwNzczNTk5OX0.YczVUJnRBcjMBdaKzgQij7MENxN6vDWfe8Btt2sP5-c'; // <-- PAMIĘTAJ O WKLEJENIU SWOJEGO KLUCZA!
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNtamxlYnRxd3l5cGx3ZGNrbHpuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIxNTk5OTksImV4cCI6MjEwNzczNTk5OX0.YczVUJnRBcjMBdaKzgQij7MENxN6vDWfe8Btt2sP5-c';
+
+    // Automatyczne wygenerowanie manifestu PWA dla instalacji na telefonie
+    (function setupPWA() {
+      const manifest = {
+        name: "Straż Alert Live - Monitoring 24/7",
+        short_name: "Straż Alert",
+        start_url: window.location.href,
+        display: "standalone",
+        background_color: "#090a0f",
+        theme_color: "#090a0f",
+        icons: [{
+          src: "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='24' fill='%23dc2626'/><text x='50%' y='56%' dominant-baseline='central' text-anchor='middle' font-size='62'>🚒</text></svg>",
+          sizes: "192x192",
+          type: "image/svg+xml"
+        }]
+      };
+      const blob = new Blob([JSON.stringify(manifest)], { type: 'application/json' });
+      document.getElementById('pwa-manifest').setAttribute('href', URL.createObjectURL(blob));
+    })();
 
     function getTodayStr() {
       const now = new Date();
@@ -385,8 +543,10 @@
       return `${y}-${m}-${d}`;
     }
 
-    let map, markersLayer, currentTileLayer;
+    let map, markersLayer, currentTileLayer, radarTileLayer = null;
+    let radarEnabled = false;
     let mapStyleIndex = parseInt(localStorage.getItem('straz_map_style') || '1', 10);
+    let alertPrefMode = localStorage.getItem('straz_alert_pref') || 'all';
     let incidents = [];
     let activeCategory = 'all';
     let searchQuery = '';
@@ -398,6 +558,7 @@
 
     let soundEnabled = true;
     let supabaseClient = null;
+    let activeWeatherWarnings = [];
 
     const monthNamesPL = [
       'Styczeń', 'Luty', 'Marzec', 'Kwiecień', 'Maj', 'Czerwiec',
@@ -434,6 +595,17 @@
         filterClass: ''
       }
     ];
+
+    // Kody TERYT Twojej okolicy (do sprawdzania oficjalnych ostrzeżeń IMGW)
+    const LOCAL_TERYT = {
+      '1020': 'pow. zgierski (Stryków, Głowno, Zgierz)',
+      '1061': 'm. Łódź',
+      '1005': 'pow. łowicki (Łowicz)',
+      '1021': 'pow. brzeziński (Brzeziny)',
+      '1006': 'pow. łódzki wschodni',
+      '1002': 'pow. kutnowski (Kutno)',
+      '1004': 'pow. łęczycki'
+    };
 
     function playSelectiveFireAlarm() {
       if (!soundEnabled) return;
@@ -499,6 +671,225 @@
       }
     }
 
+    // MODUŁ 1: ŻYWY RADAR OPADÓW I BURZ NA MAPIE (RainViewer API)
+    async function toggleWeatherRadar() {
+      const btn = document.getElementById('btn-weather-radar');
+      const pill = document.getElementById('radar-status-pill');
+
+      if (radarEnabled) {
+        if (radarTileLayer) {
+          map.removeLayer(radarTileLayer);
+          radarTileLayer = null;
+        }
+        radarEnabled = false;
+        btn.className = 'w-11 h-11 rounded-2xl bg-slate-900/95 border border-slate-700 text-slate-100 shadow-xl flex items-center justify-center active:scale-95 transition-all';
+        pill.style.display = 'none';
+        return;
+      }
+
+      try {
+        const res = await fetch('https://api.rainviewer.com/public/weather-maps.json');
+        const data = await res.json();
+        const past = data?.radar?.past || [];
+        if (past.length === 0) return alert('Chwilowy brak danych radarowych.');
+
+        const latest = past[past.length - 1];
+        const radarUrl = `${data.host}${latest.path}/256/{z}/{x}/{y}/2/1_1.png`;
+
+        if (radarTileLayer) map.removeLayer(radarTileLayer);
+        radarTileLayer = L.tileLayer(radarUrl, {
+          opacity: 0.68,
+          zIndex: 250,
+          attribution: 'Radar: RainViewer'
+        }).addTo(map);
+
+        radarEnabled = true;
+        btn.className = 'w-11 h-11 rounded-2xl bg-sky-600 border-2 border-sky-300 text-white shadow-xl shadow-sky-500/40 flex items-center justify-center active:scale-95 transition-all';
+        
+        const dt = new Date(latest.time * 1000);
+        const timeStr = dt.toTimeString().slice(0, 5);
+        document.getElementById('radar-time-label').innerText = `Pomiar radarowy z godz. ${timeStr}`;
+        pill.style.display = 'block';
+      } catch (err) {
+        console.error('Błąd ładowania radaru opadów:', err);
+      }
+    }
+
+    // MODUŁ 2: POBIERANIE OSTRZEŻEŃ IMGW + WARUNKÓW WIATRU/BURZ DLA STRYKOWA I ŁODZI
+    async function fetchWeatherAndIMGW() {
+      activeWeatherWarnings = [];
+
+      // A) Pobieramy bieżącą pogodę i porywy wiatru w Strykowie/Łodzi (Open-Meteo - zawsze dostępne, 0 limitów)
+      try {
+        const mRes = await fetch('https://api.open-meteo.com/v1/forecast?latitude=51.90&longitude=19.60&current=temperature_2m,wind_speed_10m,wind_gusts_10m,weather_code&daily=wind_gusts_10m_max&timezone=Europe%2FWarsaw');
+        const mData = await mRes.json();
+        if (mData && mData.current) {
+          const temp = Math.round(mData.current.temperature_2m);
+          const wind = Math.round(mData.current.wind_speed_10m);
+          const gusts = Math.round(mData.current.wind_gusts_10m);
+          const maxGustToday = mData.daily?.wind_gusts_10m_max?.[0] ? Math.round(mData.daily.wind_gusts_10m_max[0]) : gusts;
+          const wCode = mData.current.weather_code;
+
+          document.getElementById('header-temp').innerText = `${temp}°C`;
+          document.getElementById('meteo-temp').innerText = `${temp}°C`;
+          document.getElementById('meteo-wind').innerText = `${wind} km/h`;
+          document.getElementById('meteo-gusts').innerText = `${gusts} km/h`;
+
+          // Jeśli porywy wiatru przekraczają 60 km/h lub jest aktywna burza (kod 95-99)
+          if (wCode >= 95) {
+            activeWeatherWarnings.push({
+              level: 2,
+              title: 'Aktywne wyładowania atmosferyczne / Burza',
+              region: 'Rejon Stryków / Zgierz / Łódź',
+              desc: `Nad regionem występują zjawiska burzowe. Porywy wiatru dochodzą do ${Math.max(gusts, maxGustToday)} km/h. Możliwe interwencje związane z połamanymi konarami i podtopieniami.`,
+              from: 'Teraz',
+              to: 'Dziś wieczorem'
+            });
+          } else if (maxGustToday >= 65 || gusts >= 55) {
+            activeWeatherWarnings.push({
+              level: maxGustToday >= 85 ? 2 : 1,
+              title: `Silny i porywisty wiatr (do ${Math.max(gusts, maxGustToday)} km/h)`,
+              region: 'Powiat zgierski / łowicki / Łódź',
+              desc: `Prognozowane lub występujące silne porywy wiatru osiągające ${Math.max(gusts, maxGustToday)} km/h. Zwiększone ryzyko miejscowych zagrożeń (powalone drzewa, uszkodzenia linii energetycznych).`,
+              from: 'Dziś',
+              to: 'W ciągu doby'
+            });
+          }
+        }
+      } catch (e) {
+        console.warn('Błąd pobierania Open-Meteo:', e);
+      }
+
+      // B) Odpytujemy oficjalne API IMGW-PIB (danepubliczne.imgw.pl)
+      try {
+        const iRes = await fetch('https://danepubliczne.imgw.pl/api/data/warningsmeteo');
+        if (iRes.ok) {
+          const iData = await iRes.json();
+          if (Array.isArray(iData)) {
+            iData.forEach(w => {
+              const terytList = w.teryt || [];
+              const matchedLocal = terytList.find(t => LOCAL_TERYT[t]);
+              const matchedLodzkie = terytList.find(t => String(t).startsWith('10'));
+              const stopien = parseInt(w.stopien || '1', 10);
+
+              if (matchedLocal || matchedLodzkie || stopien >= 2) {
+                const regLabel = matchedLocal
+                  ? LOCAL_TERYT[matchedLocal]
+                  : (matchedLodzkie ? 'woj. łódzkie' : 'Ostrzeżenie krajowe (2/3 st.)');
+
+                activeWeatherWarnings.push({
+                  level: stopien,
+                  title: w.nazwa_zdarzenia || 'Ostrzeżenie meteorologiczne IMGW',
+                  region: regLabel,
+                  desc: w.tresc || w.komentarz || 'Brak szczegółowego opisu.',
+                  from: (w.obowiazuje_od || '').slice(0, 16),
+                  to: (w.obowiazuje_do || '').slice(0, 16)
+                });
+              }
+            });
+          }
+        }
+      } catch (e) {
+        // Serwer IMGW czasem blokuje CORS w przeglądarce - wtedy działają dane z Open-Meteo powyżej
+      }
+
+      renderWeatherUI();
+    }
+
+    function renderWeatherUI() {
+      const banner = document.getElementById('imgw-alert-banner');
+      const badge = document.getElementById('imgw-banner-badge');
+      const text = document.getElementById('imgw-banner-text');
+      const list = document.getElementById('imgw-warnings-list');
+
+      if (activeWeatherWarnings.length === 0) {
+        banner.style.display = 'none';
+        list.innerHTML = `
+          <div class="p-4 rounded-2xl bg-emerald-950/30 border border-emerald-500/40 text-center space-y-1">
+            <div class="text-xs font-tech font-bold text-emerald-400 uppercase">✅ Brak aktywnych ostrzeżeń IMGW dla powiatu zgierskiego i Łodzi</div>
+            <p class="text-[11px] text-slate-300">Warunki atmosferyczne w rejonie Strykowa, Zgierza, Łowicza i Łodzi są obecnie stabilne. Gdy IMGW wyda ostrzeżenie (wiatr, burza, ulewa, oblodzenie), u góry ekranu automatycznie zapali się pasek alarmowy.</p>
+          </div>
+        `;
+        return;
+      }
+
+      // Sortujemy od najwyższego stopnia zagrożenia
+      activeWeatherWarnings.sort((a, b) => b.level - a.level);
+      const top = activeWeatherWarnings[0];
+
+      banner.style.display = 'block';
+      if (top.level >= 3) {
+        banner.className = 'w-full rounded-xl p-2.5 border bg-red-950/90 border-red-500 backdrop-blur-md shadow-lg cursor-pointer';
+        badge.className = 'px-1.5 py-0.5 rounded text-[10px] font-mono font-bold uppercase bg-red-600 text-white';
+      } else if (top.level === 2) {
+        banner.className = 'w-full rounded-xl p-2.5 border bg-amber-950/90 border-amber-500 backdrop-blur-md shadow-lg cursor-pointer';
+        badge.className = 'px-1.5 py-0.5 rounded text-[10px] font-mono font-bold uppercase bg-amber-500 text-slate-950';
+      } else {
+        banner.className = 'w-full rounded-xl p-2.5 border bg-yellow-950/85 border-yellow-500/80 backdrop-blur-md shadow-lg cursor-pointer';
+        badge.className = 'px-1.5 py-0.5 rounded text-[10px] font-mono font-bold uppercase bg-yellow-400 text-slate-950';
+      }
+
+      badge.innerText = `⚡ IMGW ${top.level}°`;
+      text.innerText = `${top.title} (${top.region})`;
+
+      list.innerHTML = activeWeatherWarnings.map(w => `
+        <div class="p-3.5 rounded-2xl bg-slate-950 border ${w.level >= 2 ? 'border-amber-500/70' : 'border-yellow-500/50'} space-y-1.5">
+          <div class="flex items-center justify-between gap-2">
+            <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase ${w.level >= 3 ? 'bg-red-600 text-white' : (w.level === 2 ? 'bg-amber-500 text-slate-950' : 'bg-yellow-400 text-slate-950')}">
+              Stopień ${w.level}
+            </span>
+            <span class="text-[10px] font-mono text-amber-400 font-semibold">${w.region}</span>
+          </div>
+          <h4 class="font-tech font-bold text-sm text-white">${w.title}</h4>
+          <p class="text-xs text-slate-300 leading-relaxed">${w.desc}</p>
+          <div class="text-[10px] font-mono text-slate-400 pt-1">Obowiązuje: ${w.from} → ${w.to}</div>
+        </div>
+      `).join('');
+    }
+
+    // MODUŁ 3: PREFERENCJE POWIADOMIEŃ DLA TWOJEJ OKOLICY (PWA)
+    window.setAlertPref = function(mode) {
+      alertPrefMode = mode;
+      localStorage.setItem('straz_alert_pref', mode);
+      renderSettingsModal();
+    };
+
+    function renderSettingsModal() {
+      const btnAll = document.getElementById('pref-mode-all');
+      const btnLoc = document.getElementById('pref-mode-local');
+      const chkAll = document.getElementById('pref-check-all');
+      const chkLoc = document.getElementById('pref-check-local');
+      const label = document.getElementById('monitoring-mode-label');
+
+      if (alertPrefMode === 'local') {
+        btnLoc.className = 'w-full text-left p-3.5 rounded-2xl border transition-all flex items-center justify-between bg-red-600/20 border-red-500';
+        chkLoc.className = 'w-5 h-5 rounded-full border border-red-400 bg-red-500 text-white flex items-center justify-center text-xs';
+        chkLoc.innerText = '✓';
+        btnAll.className = 'w-full text-left p-3.5 rounded-2xl border transition-all flex items-center justify-between bg-slate-950 border-slate-800';
+        chkAll.className = 'w-5 h-5 rounded-full border border-slate-600';
+        chkAll.innerText = '';
+        label.innerText = 'PRIORYTET: ŁÓDZKIE & OKOLICE';
+      } else {
+        btnAll.className = 'w-full text-left p-3.5 rounded-2xl border transition-all flex items-center justify-between bg-red-600/20 border-red-500';
+        chkAll.className = 'w-5 h-5 rounded-full border border-red-400 bg-red-500 text-white flex items-center justify-center text-xs';
+        chkAll.innerText = '✓';
+        btnLoc.className = 'w-full text-left p-3.5 rounded-2xl border transition-all flex items-center justify-between bg-slate-950 border-slate-800';
+        chkLoc.className = 'w-5 h-5 rounded-full border border-slate-600';
+        chkLoc.innerText = '';
+        label.innerText = 'MONITORING POLSKA 24/7';
+      }
+    }
+
+    function shouldTriggerAlarmForIncident(item) {
+      if (alertPrefMode === 'all') return true;
+      const text = `${item.title} ${item.location} ${item.region}`.toLowerCase();
+      const localKeywords = ['stryków', 'strykow', 'zgierz', 'zgierski', 'głowno', 'glowno', 'łowicz', 'lowicz', 'kutno', 'brzeziny', 'łódź', 'lodz', 'łódzkie', 'a1', 'a2', 'dk14', 'dk92', 'skierniewic', 'pabianic', 'łęczyc'];
+      if (localKeywords.some(k => text.includes(k))) return true;
+      // Albo bardzo bliskie współrzędne GPS (< 65 km od Strykowa)
+      const dist = Math.hypot((item.lat || 0) - 51.90, (item.lng || 0) - 19.60);
+      return dist < 0.65;
+    }
+
     function applyMapStyle(index) {
       if (index < 0 || index >= mapStyles.length) index = 0;
       mapStyleIndex = index;
@@ -510,7 +901,8 @@
       }
       currentTileLayer = L.tileLayer(style.url, {
         attribution: style.attr,
-        maxZoom: 19
+        maxZoom: 19,
+        className: 'base-map-tiles'
       }).addTo(map);
 
       const mapEl = document.getElementById('map');
@@ -545,7 +937,7 @@
     };
 
     function initMap() {
-      map = L.map('map', { zoomControl: false }).setView([51.95, 19.45], 7);
+      map = L.map('map', { zoomControl: false }).setView([51.90, 19.55], 7);
       applyMapStyle(mapStyleIndex);
       markersLayer = L.layerGroup().addTo(map);
 
@@ -752,6 +1144,7 @@
     };
 
     function showToast(item) {
+      if (!shouldTriggerAlarmForIncident(item)) return;
       playSelectiveFireAlarm();
       const toast = document.getElementById('toast-alert');
       document.getElementById('toast-time').innerText = item.time;
@@ -861,11 +1254,16 @@
       }
     }, 30000);
 
+    // Odświeżanie danych meteo co 15 minut
+    setInterval(fetchWeatherAndIMGW, 15 * 60 * 1000);
+
     window.addEventListener('DOMContentLoaded', () => {
       lucide.createIcons();
       initMap();
       updateDateUI();
+      renderSettingsModal();
       loadIncidentsFromSupabase().then(() => subscribeRealtime());
+      fetchWeatherAndIMGW();
 
       const searchInput = document.getElementById('search-input');
       const clearSearch = document.getElementById('clear-search');
@@ -879,6 +1277,24 @@
         searchQuery = '';
         clearSearch.style.display = 'none';
         renderAll();
+      });
+
+      const openWeatherModal = () => {
+        document.getElementById('weather-modal').style.display = 'flex';
+      };
+      document.getElementById('btn-weather-modal').addEventListener('click', openWeatherModal);
+      document.getElementById('nav-btn-weather').addEventListener('click', openWeatherModal);
+      document.getElementById('imgw-alert-banner').addEventListener('click', openWeatherModal);
+
+      document.getElementById('btn-weather-radar').addEventListener('click', toggleWeatherRadar);
+      document.getElementById('btn-modal-toggle-radar').addEventListener('click', () => {
+        closeModal('weather-modal');
+        toggleWeatherRadar();
+      });
+
+      document.getElementById('btn-settings').addEventListener('click', () => {
+        renderSettingsModal();
+        document.getElementById('settings-modal').style.display = 'flex';
       });
 
       const openCal = () => {
@@ -952,7 +1368,7 @@
       });
 
       document.getElementById('btn-reset-poland').addEventListener('click', () => {
-        map.flyTo([52.05, 19.45], 6);
+        map.flyTo([51.90, 19.55], 7);
       });
 
       document.getElementById('btn-test-sound').addEventListener('click', () => {
@@ -970,7 +1386,10 @@
           : 'h-9 w-9 rounded-xl bg-slate-900 border border-slate-700/80 text-slate-500 flex items-center justify-center';
       });
 
-      document.getElementById('btn-refresh').addEventListener('click', () => loadIncidentsFromSupabase());
+      document.getElementById('btn-refresh').addEventListener('click', () => {
+        loadIncidentsFromSupabase();
+        fetchWeatherAndIMGW();
+      });
 
       document.getElementById('btn-toggle-incidents').addEventListener('click', () => {
         const p = document.getElementById('incidents-panel');
