@@ -1,4 +1,5 @@
 import os
+import re
 import json
 import math
 import urllib.request
@@ -30,26 +31,35 @@ RSS_FEEDS = [
     "https://remiza.com.pl/feed/",
     
     # 5. Ogólnopolskie akcje straży pożarnej z ostatnich 24h
-    "https://news.google.com/rss/search?q=(stra%C5%BC+po%C5%BCarna+OR+JRG+OR+OSP)+(po%C5%BCar+OR+wypadek+OR+zderzenie+OR+akcja)+when:1d&hl=pl&gl=PL&ceid=PL:pl"
+    "https://news.google.com/rss/search?q=(stra%C5%BC+po%C5%BCarna+OR+JRG+OR+OSP)+(po%C5%BCar+OR+wypadek+OR+zderzenie+OR+interwencja)+when:1d&hl=pl&gl=PL&ceid=PL:pl"
 ]
 
-# Sprawdzane TYLKO w tytule artykułu, żeby boczne linki w opisie nie blokowały prawdziwych wypadków
 IGNORE_TITLE_WORDS = [
     "zbiórka", "nieśmiertelniki", "ślubowanie", "awans", "odznaczenia", 
     "przetarg", "wspomnienie", "rocznica", "pogrzeb", "żegnają", 
     "oddali hołd", "nie żyje komendant", "był zastępcą", "lotto", 
     "losowania", "szczęśliwe liczby", "skrót dnia", "trening", 
     "szkolenie", "ćwiczenia", "zawody", "turniej", "humbak", "wieloryb", 
-    "sekcje zwłok", "prokuratura", "areszt", "zarzuty", "wyrok"
+    "sekcje zwłok", "prokuratura", "areszt", "zarzuty", "wyrok",
+    "posadzili", "centrum handlowe", "otworzą", "koncert", "atrakcje",
+    "kanada", "kanady", "albercie", "usa", "niemczech", "ukrain"
 ]
 
-ACTION_STEMS = [
-    "pożar", "płon", "płomien", "spłon", "ogień", "ogni", "zadymien", "czad", "gaz",
-    "wypadk", "wypadek", "kolizj", "zderz", "dachowa", "potrąc", "zablokow", 
-    "utrudnieni", "akcj", "zastęp", "straż", "interwenc", "interweniowa", "uderz", 
-    "wjechał", "wyciek", "plam", "drzew", "ewakuac", "przewróc", "lawet", 
-    "karambol", "rann", "poszkodowan", "śmierteln", "runął", "tragedi", "wybuch", "eksploz"
+# Precyzyjne słowa-klucze (sprawdzane w samym TYTULE artykułu, bez fałszywych trafień jak "atrakcje")
+TITLE_ACTION_WORDS = [
+    "pożar", "płonie", "płoną", "spłonął", "spłonęła", "ogień", "zadymienie", "czad", "wyciek",
+    "wypadek", "wypadku", "kolizja", "kolizji", "zderzenie", "zderzyły", "dachowanie", "dachował",
+    "potrącenie", "potrącony", "potrącona", "zablokowana", "utrudnienia", "straż", "strażacy",
+    "interwencja", "interweniowała", "uderzył", "wbił się", "wjechał", "powalone drzewo", "ewakuacja",
+    "przewróciła", "karambol", "ranny", "ranna", "ranni", "poszkodowany", "poszkodowana", "śmiertelny",
+    "runął", "wybuch", "eksplozja", "szpitalu", "szpitala"
 ]
+
+STOP_WORDS = {
+    "pożar", "wypadek", "kolizja", "zderzenie", "straż", "straży", "strażacy", "akcja", 
+    "ulicy", "droga", "powiat", "okolice", "łodzi", "łódź", "łowiczu", "łowicz", "policja",
+    "kierowca", "szpitala", "szpitalu", "centrum", "nocny", "jedna", "osoba", "trafiła"
+}
 
 def get_available_models():
     preferred = ["gemini-flash-lite-latest", "gemini-3.8-flash-lite", "gemini-3.8-flash", "gemini-flash-latest"]
@@ -61,41 +71,58 @@ def get_available_models():
                     continue
                 if name not in preferred:
                     preferred.append(name)
-    except Exception as e:
-        print(f"Info o liście modeli: {e}")
+    except Exception:
+        pass
     return preferred
 
+def extract_keywords(text):
+    clean = re.sub(r'[^a-ząćęłńóśźż0-9\s]', ' ', text.lower())
+    return set(w for w in clean.split() if len(w) > 3 and w not in STOP_WORDS)
+
+def is_pre_duplicate(raw_title, recent_incidents, seen_in_this_run):
+    """Sprawdza PRZED zapytaniem do AI, czy ten temat już był (oszczędza limit AI!)."""
+    kw1 = extract_keywords(raw_title)
+    if len(kw1) < 2:
+        return False
+
+    for seen_kw in seen_in_this_run:
+        if len(kw1 & seen_kw) >= 2:
+            return True
+
+    for inc in recent_incidents:
+        inc_text = f"{inc.get('title', '')} {inc.get('description', '')}"
+        kw2 = extract_keywords(inc_text)
+        if len(kw1 & kw2) >= 2:
+            return True
+
+    return False
+
 def is_duplicate_recent(new_title, new_loc, new_cat, new_lat, new_lng, recent_incidents):
-    """Precyzyjny Anty-Duplikator: blokuje powtórki tej samej akcji, ale pozwala na wiele różnych akcji w tym samym mieście."""
+    """Sprawdza po analizie AI, czy identyczna akcja nie wisi już na mapie."""
     t1 = new_title.lower().strip()
-    l1 = new_loc.lower().strip()
-    stop_words = {"pożar", "wypadek", "kolizja", "zderzenie", "straż", "straży", "akcja", "ulicy", "droga", "powiat", "okolice"}
-    words1 = set(w for w in t1.replace(",", " ").replace("-", " ").split() if len(w) > 3 and w not in stop_words)
+    kw1 = extract_keywords(new_title)
 
     for inc in recent_incidents:
         t2 = (inc.get("title") or "").lower().strip()
-        l2 = (inc.get("location") or "").lower().strip()
         cat2 = inc.get("category")
 
-        # 1. Identyczny tytuł
         if t1 == t2:
             return True
 
-        # 2. Podobne kluczowe słowa w tytule (np. "szybowiec", "stajni", "nisku", "tuszewskiej")
-        words2 = set(w for w in t2.replace(",", " ").replace("-", " ").split() if len(w) > 3 and w not in stop_words)
-        if len(words1 & words2) >= 2:
+        kw2 = extract_keywords(t2)
+        if len(kw1 & kw2) >= 2 and new_cat == cat2:
             return True
 
-        # 3. Bardzo bliska odległość GPS (~2 km) ORAZ ta sama kategoria zdarzenia
+        # Bardzo bliska odległość GPS (~1.5 km) ORAZ ta sama kategoria zdarzenia
         if new_cat == cat2 and inc.get("lat") and inc.get("lng"):
             dist = math.hypot(new_lat - float(inc["lat"]), new_lng - float(inc["lng"]))
-            if dist < 0.018:
+            if dist < 0.015:
                 return True
 
     return False
 
 def run_worker():
-    print("Rozpoczynam głębokie skanowanie (20 wpisów na kanał + Poprawiony Anty-Duplikator)...")
+    print("Rozpoczynam szybkie skanowanie (Pre-Duplikator + Czysty Prompt AI)...")
     
     available_models = get_available_models()
     print(f"Kolejność modeli AI: {available_models[:4]}")
@@ -103,22 +130,19 @@ def run_worker():
     now_pl = datetime.now()
     today_str = now_pl.strftime("%Y-%m-%d")
 
-    existing_res = supabase.table('incidents').select('id, external_id, title, location, category, lat, lng, date_str').order('id', desc=True).limit(400).execute()
+    existing_res = supabase.table('incidents').select('id, external_id, title, description, location, category, lat, lng, date_str').order('id', desc=True).limit(400).execute()
     all_rows = existing_res.data or []
     existing_ids = set(r['external_id'] for r in all_rows if r.get('external_id'))
-    
-    recent_incidents = all_rows[:50]
-    recent_summary_for_ai = "\n".join(
-        [f"- {r.get('title')} ({r.get('location')}, data: {r.get('date_str')})" for r in all_rows[:35]]
-    )
+    recent_incidents = all_rows[:60]
 
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/124.0.0.0 Safari/537.36'}
     ai_calls_this_run = 0
-    MAX_AI_CALLS_PER_RUN = 8
+    MAX_AI_CALLS_PER_RUN = 12
+    seen_in_this_run = []
 
     for feed_url in RSS_FEEDS:
         if ai_calls_this_run >= MAX_AI_CALLS_PER_RUN:
-            print("Osiągnięto limit 8 analiz AI w tym cyklu.")
+            print("Osiągnięto limit 12 analiz AI w tym cyklu.")
             break
 
         print(f"\nSkanuję źródło: {feed_url[:68]}...")
@@ -131,11 +155,9 @@ def run_worker():
             print(f"Błąd pobierania RSS: {e}")
             continue
 
-        # Sortujemy wpisy od najnowszych, żeby poranne artykuły nie blokowały wieczornych!
         entries = list(parsed_feed.entries)
         entries.sort(key=lambda x: x.get('published_parsed') or (0,), reverse=True)
 
-        # Sprawdzamy aż 20 najnowszych wpisów w każdym kanale (zamiast tylko 5!)
         for entry in entries[:20]:
             if ai_calls_this_run >= MAX_AI_CALLS_PER_RUN:
                 break
@@ -148,44 +170,47 @@ def run_worker():
             if not external_id or not title or external_id in existing_ids:
                 continue
 
-            title_lower = title.lower()
-            text_lower = (title + " " + summary).lower()
+            # Odcinamy nazwę gazety z końca tytułu (np. " - TuLodz.pl")
+            clean_title = title.rsplit(" - ", 1)[0] if " - " in title else title
+            title_lower = clean_title.lower()
 
             if any(bad in title_lower for bad in IGNORE_TITLE_WORDS):
-                print(f"⏭️ Pominięto (temat poboczny w tytule): {title[:55]}...")
                 existing_ids.add(external_id)
                 continue
 
-            if not any(stem in text_lower for stem in ACTION_STEMS):
+            if not any(w in title_lower for w in TITLE_ACTION_WORDS):
+                existing_ids.add(external_id)
+                continue
+
+            # Sprawdzamy PRZED wysłaniem do AI, czy to nie powtórka (np. Lexus w Łowiczu lub drugi artykuł o tym samym tramwaju)
+            if is_pre_duplicate(clean_title, recent_incidents, seen_in_this_run):
+                print(f"⏭️ Pominięto przed AI (temat jest już w bazie): {clean_title[:60]}...")
                 existing_ids.add(external_id)
                 continue
 
             print(f"🔍 Analizuję przez AI nowy wpis: {title}")
 
             prompt = f"""
-            Przeanalizuj poniższy artykuł dotyczący zdarzenia ratowniczego w Polsce.
-            Tytuł: {title}
-            Treść: {summary}
+            Przeanalizuj poniższy artykuł prasowy o zdarzeniu w Polsce.
+            Tytuł: {clean_title}
+            Opis: {summary}
 
-            LISTA ZDARZEŃ, KTÓRE JUŻ MAMY W BAZIE:
-            {recent_summary_for_ai}
+            Oceń, czy to konkretne zdarzenie ratownicze, drogowe lub pożarowe w Polsce (pożar, wypadek, kolizja, zderzenie tramwajów/aut, potrącenie, wyciek gazu, interwencja straży/służb).
+            Jeśli to zdarzenie za granicą (np. Kanada, USA), otwarcie sklepu lub sadzenie drzew -> ustaw "is_incident": false.
+            Jeśli to realne zdarzenie w Polsce -> ustaw "is_incident": true!
 
-            ZASADY:
-            1. Jeśli ten artykuł opisuje DOKŁADNIE TO SAMO zdarzenie, które już jest na powyższej liście (np. kolejny artykuł o pożarze w Nisku, szybowcu w Pruszczu Gdańskim itp.), ustaw "is_incident": false.
-            2. Jeśli to NOWY pożar, wypadek, kolizja lub interwencja straży w Polsce (nawet w mieście, które już było na liście, ale inne zdarzenie), ustaw "is_incident": true!
-
-            Zwróć wynik WYŁĄCZNIE jako czysty obiekt JSON:
+            Zwróć WYŁĄCZNIE obiekt JSON:
             - "is_incident": boolean
-            - "title": string (Krótki, konkretny tytuł meldunku po polsku).
+            - "title": string (Krótki tytuł meldunku po polsku, np. "Zderzenie tramwajów na ul. Narutowicza w Łodzi").
             - "category": string (jedno z: "fire", "accident", "hazard").
             - "status": string (jedno z: "Trwa akcja", "Opanowane", "Zakończone").
-            - "location": string (Miejscowość i ulica/droga, np. "Zgierz, ul. Długa", "Łowicz, DK92").
-            - "geocode_query": string (Miejscowość i ulica do mapy, np. "Zgierz, łódzkie").
-            - "region": string (Województwo lub powiat, np. "powiat zgierski", "łódzkie").
+            - "location": string (Miejscowość i ulica/droga, np. "Łódź, ul. Narutowicza").
+            - "geocode_query": string (Miejscowość i województwo do mapy, np. "Łódź, Narutowicza" lub "Stryków, łódzkie").
+            - "region": string (Województwo lub powiat, np. "łódzkie").
             - "units": string (Siły i Środki, np. "PSP, OSP, ZRM, Policja").
             - "description": string (Krótki opis 1-2 zdania po polsku).
-            - "estimated_lat": number (Szerokość GPS w Polsce, np. 51.85).
-            - "estimated_lng": number (Długość GPS w Polsce, np. 19.41).
+            - "estimated_lat": number (Szerokość GPS w Polsce, np. 51.77).
+            - "estimated_lng": number (Długość GPS w Polsce, np. 19.47).
             """
 
             response = None
@@ -204,7 +229,6 @@ def run_worker():
                     break
                 except Exception as e:
                     if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e):
-                        print(f"   ⚠️ Model {model_name} wyczerpał limit (429), przełączam...")
                         continue
                     continue
 
@@ -221,9 +245,10 @@ def run_worker():
                 
                 data = json.loads(result_text.strip())
                 existing_ids.add(external_id)
+                seen_in_this_run.append(extract_keywords(clean_title))
 
                 if not data.get("is_incident", False):
-                    print("-> AI odrzuciło (duplikat lub artykuł nienewsowy).")
+                    print("-> AI odrzuciło (to nie jest akcja ratownicza w Polsce).")
                     continue
 
                 lat = float(data.get("estimated_lat") or 51.90)
@@ -242,7 +267,7 @@ def run_worker():
                     except Exception:
                         pass
 
-                inc_title = data.get("title", title)[:120]
+                inc_title = data.get("title", clean_title)[:120]
                 inc_loc = data.get("location", "Polska")
                 inc_cat = data.get("category", "hazard")
 
@@ -250,7 +275,6 @@ def run_worker():
                     print(f"🔄 Anty-Duplikator zablokował powtórkę: {inc_title} ({inc_loc})")
                     continue
 
-                # Lekki offset, żeby różne zdarzenia w tym samym mieście nie przykrywały się idealnie w 1 punkcie
                 offset = ((hash(external_id) % 60) - 30) * 0.0003
 
                 insert_data = {
@@ -265,7 +289,7 @@ def run_worker():
                     "date_str": today_str,
                     "time_str": now_pl.strftime("%H:%M"),
                     "units": data.get("units", "PSP, OSP, Policja"),
-                    "description": data.get("description", title),
+                    "description": data.get("description", clean_title),
                     "source_url": link
                 }
 
