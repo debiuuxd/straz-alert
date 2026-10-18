@@ -28,14 +28,13 @@
     
     #map { position: absolute; top: 0; left: 0; right: 0; bottom: 0; width: 100%; height: 100%; z-index: 10; background: #090a0f; }
     
-    /* Poprawione filtry mapy: ciemny motyw i nienaruszone kolory radaru deszczowego */
-    .map-dark-filter .leaflet-tile-pane {
+    /* Ciemny motyw działający w 100% na PC oraz na telefonach (Android / iOS) */
+    .map-dark-filter img.leaflet-tile:not(.radar-tiles) {
+      -webkit-filter: invert(100%) hue-rotate(180deg) brightness(95%) contrast(90%);
       filter: invert(100%) hue-rotate(180deg) brightness(95%) contrast(90%);
     }
-    .map-dark-filter .radar-tiles {
-      filter: invert(100%) hue-rotate(180deg);
-    }
-    .map-oled-filter .leaflet-tile-pane {
+    .map-oled-filter img.leaflet-tile:not(.radar-tiles) {
+      -webkit-filter: invert(100%) grayscale(100%) brightness(75%) contrast(155%);
       filter: invert(100%) grayscale(100%) brightness(75%) contrast(155%);
     }
     
@@ -86,52 +85,52 @@
     </div>
   </div>
 
-  <!-- GÓRNY PANEL -->
+  <!-- GÓRNY PANEL (Zoptymalizowany pod ekran telefonu!) -->
   <div style="z-index: 40;" class="fixed top-0 left-0 right-0 pointer-events-none flex flex-col">
     
-    <header class="h-14 bg-slate-950/90 backdrop-blur-md border-b border-slate-800/80 px-3 flex items-center justify-between pointer-events-auto shadow-lg">
-      <div class="flex items-center gap-2">
-        <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-red-600 to-amber-600 flex items-center justify-center shadow-md shadow-red-600/30 border border-red-400/40">
-          <i data-lucide="flame" class="w-5 h-5 text-white"></i>
+    <header class="min-h-[56px] py-1.5 bg-slate-950/95 backdrop-blur-md border-b border-slate-800/80 px-2.5 sm:px-4 flex items-center justify-between gap-2 pointer-events-auto shadow-lg">
+      <div class="flex items-center gap-2 min-w-0 flex-1">
+        <div class="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-gradient-to-br from-red-600 to-amber-600 flex items-center justify-center shadow-md shadow-red-600/30 border border-red-400/40 flex-shrink-0">
+          <i data-lucide="flame" class="w-4 h-4 sm:w-5 sm:h-5 text-white"></i>
         </div>
-        <div>
-          <div class="flex items-center gap-1.5">
-            <span class="font-tech text-base font-bold tracking-wider text-white">STRAŻ ALERT</span>
-            <span class="px-1.5 py-0.2 text-[9px] font-mono font-bold bg-red-500/20 text-red-400 border border-red-500/40 rounded">LIVE</span>
+        <div class="min-w-0 flex-1">
+          <div class="flex items-center gap-1.5 whitespace-nowrap">
+            <span class="font-tech text-sm sm:text-base font-bold tracking-wider text-white leading-none">STRAŻ ALERT</span>
+            <span class="px-1.5 py-0.5 text-[9px] font-mono font-bold bg-red-500/20 text-red-400 border border-red-500/40 rounded leading-none">LIVE</span>
           </div>
-          <p class="text-[10px] text-slate-400 font-mono tracking-tight flex items-center gap-1">
-            <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-            <span id="monitoring-mode-label">MONITORING POLSKA 24/7</span>
+          <p class="text-[9px] sm:text-[10px] text-slate-400 font-mono tracking-tight flex items-center gap-1 mt-1 truncate">
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse flex-shrink-0"></span>
+            <span id="monitoring-mode-label" class="truncate">PRIORYTET: ŁÓDZKIE</span>
           </p>
         </div>
       </div>
 
-      <div class="flex items-center gap-1">
-        <button id="btn-weather-modal" title="Status Pogodowy IMGW / Warunki w okolicy" class="h-9 px-2 rounded-xl bg-slate-900 border border-slate-700/80 text-sky-400 text-[11px] font-mono font-bold flex items-center gap-1 active:scale-95 transition-all">
+      <div class="flex items-center gap-1 flex-shrink-0">
+        <button id="btn-weather-modal" title="Status Pogodowy IMGW / Warunki w okolicy" class="h-8 sm:h-9 px-2 rounded-xl bg-slate-900 border border-slate-700/80 text-sky-400 text-[11px] font-mono font-bold flex items-center gap-1 active:scale-95 transition-all">
           <i data-lucide="cloud-lightning" class="w-4 h-4"></i>
-          <span id="header-temp" class="hidden sm:inline">--°C</span>
+          <span id="header-temp" class="text-[10px]">--°C</span>
         </button>
-        <button id="btn-test-sound" title="Przetestuj dźwięk alarmu DSP" class="h-9 px-2 rounded-xl bg-slate-900 border border-slate-700/80 text-amber-400 text-[11px] font-mono font-bold flex items-center gap-1 active:scale-95 transition-all">
+        <button id="btn-test-sound" title="Przetestuj dźwięk alarmu DSP" class="hidden sm:flex h-9 px-2.5 rounded-xl bg-slate-900 border border-slate-700/80 text-amber-400 text-[11px] font-mono font-bold items-center gap-1 active:scale-95 transition-all">
           <i data-lucide="bell-ring" class="w-3.5 h-3.5"></i>
-          <span class="hidden md:inline">DSP</span>
+          <span>TEST DSP</span>
         </button>
-        <button id="btn-sound-toggle" title="Włącz/Wyłącz dźwięk" class="h-9 w-9 rounded-xl bg-slate-900 border border-slate-700/80 text-emerald-400 flex items-center justify-center active:scale-95 transition-all">
+        <button id="btn-sound-toggle" title="Włącz/Wyłącz dźwięk" class="h-8 w-8 sm:h-9 sm:w-9 rounded-xl bg-slate-900 border border-slate-700/80 text-emerald-400 flex items-center justify-center active:scale-95 transition-all">
           <i data-lucide="volume-2" class="w-4 h-4" id="sound-icon"></i>
         </button>
-        <button id="btn-settings" title="Ustawienia powiadomień i aplikacji PWA" class="h-9 w-9 rounded-xl bg-slate-900 border border-slate-700/80 text-slate-300 flex items-center justify-center active:scale-95 transition-all">
+        <button id="btn-settings" title="Ustawienia powiadomień i test DSP" class="h-8 w-8 sm:h-9 sm:w-9 rounded-xl bg-slate-900 border border-slate-700/80 text-slate-300 flex items-center justify-center active:scale-95 transition-all">
           <i data-lucide="sliders-horizontal" class="w-4 h-4"></i>
         </button>
-        <button id="btn-refresh" title="Odśwież bazę" class="h-9 w-9 rounded-xl bg-slate-900 border border-slate-700/80 text-slate-300 flex items-center justify-center active:scale-95 transition-all">
+        <button id="btn-refresh" title="Odśwież bazę" class="h-8 w-8 sm:h-9 sm:w-9 rounded-xl bg-slate-900 border border-slate-700/80 text-slate-300 flex items-center justify-center active:scale-95 transition-all">
           <i data-lucide="refresh-cw" class="w-4 h-4" id="refresh-icon"></i>
         </button>
-        <button id="btn-toggle-incidents" class="h-9 px-2.5 rounded-xl bg-slate-900 border border-slate-700/80 text-slate-100 text-xs font-medium flex items-center gap-1 active:scale-95 transition-all">
+        <button id="btn-toggle-incidents" class="h-8 sm:h-9 px-2 sm:px-2.5 rounded-xl bg-slate-900 border border-slate-700/80 text-slate-100 text-xs font-medium flex items-center gap-1 active:scale-95 transition-all">
           <i data-lucide="list" class="w-4 h-4 text-red-400"></i>
           <span id="header-counter" class="bg-red-500/20 text-red-400 font-mono text-[11px] px-1.5 py-0.5 rounded-full font-bold">0</span>
         </button>
       </div>
     </header>
 
-    <div class="px-3 pt-2.5 pb-2 bg-gradient-to-b from-slate-950/85 via-slate-950/60 to-transparent pointer-events-auto">
+    <div class="px-3 pt-2 pb-2 bg-gradient-to-b from-slate-950/85 via-slate-950/60 to-transparent pointer-events-auto">
       <div class="max-w-xl mx-auto space-y-2">
         <div class="flex gap-1.5">
           <div class="relative flex-1">
@@ -326,6 +325,10 @@
             <div class="text-[11px] text-slate-400 mt-0.5">Syrena wyje dla woj. łódzkiego oraz dużych katastrof</div>
           </div>
           <div id="pref-check-local" class="w-5 h-5 rounded-full border flex items-center justify-center"></div>
+        </button>
+
+        <button id="btn-test-sound-modal" class="w-full py-2.5 px-3.5 rounded-2xl bg-slate-950 border border-amber-500/40 text-amber-400 font-tech font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 active:scale-95 transition-all">
+          <i data-lucide="bell-ring" class="w-4 h-4"></i> Przetestuj dźwięk alarmu DSP
         </button>
 
         <div class="p-3.5 rounded-2xl bg-slate-950 border border-slate-800 space-y-2">
@@ -856,7 +859,7 @@
         btnAll.className = 'w-full text-left p-3.5 rounded-2xl border transition-all flex items-center justify-between bg-slate-950 border-slate-800';
         chkAll.className = 'w-5 h-5 rounded-full border border-slate-600';
         chkAll.innerText = '';
-        label.innerText = 'PRIORYTET: ŁÓDZKIE & OKOLICE';
+        label.innerText = 'PRIORYTET: ŁÓDZKIE';
       } else {
         btnAll.className = 'w-full text-left p-3.5 rounded-2xl border transition-all flex items-center justify-between bg-red-600/20 border-red-500';
         chkAll.className = 'w-5 h-5 rounded-full border border-red-400 bg-red-500 text-white flex items-center justify-center text-xs';
@@ -864,7 +867,7 @@
         btnLoc.className = 'w-full text-left p-3.5 rounded-2xl border transition-all flex items-center justify-between bg-slate-950 border-slate-800';
         chkLoc.className = 'w-5 h-5 rounded-full border border-slate-600';
         chkLoc.innerText = '';
-        label.innerText = 'MONITORING POLSKA 24/7';
+        label.innerText = 'POLSKA 24/7';
       }
     }
 
@@ -1267,6 +1270,15 @@
         document.getElementById('settings-modal').style.display = 'flex';
       });
 
+      const triggerTestSound = () => {
+        const prev = soundEnabled;
+        soundEnabled = true;
+        playSelectiveFireAlarm();
+        soundEnabled = prev;
+      };
+      document.getElementById('btn-test-sound').addEventListener('click', triggerTestSound);
+      document.getElementById('btn-test-sound-modal').addEventListener('click', triggerTestSound);
+
       const openCal = () => {
         if (selectedDate) {
           const parts = selectedDate.split('-');
@@ -1335,19 +1347,12 @@
         map.flyTo([51.90, 19.55], 7);
       });
 
-      document.getElementById('btn-test-sound').addEventListener('click', () => {
-        const prev = soundEnabled;
-        soundEnabled = true;
-        playSelectiveFireAlarm();
-        soundEnabled = prev;
-      });
-
       document.getElementById('btn-sound-toggle').addEventListener('click', () => {
         soundEnabled = !soundEnabled;
         const btn = document.getElementById('btn-sound-toggle');
         btn.className = soundEnabled 
-          ? 'h-9 w-9 rounded-xl bg-slate-900 border border-slate-700/80 text-emerald-400 flex items-center justify-center'
-          : 'h-9 w-9 rounded-xl bg-slate-900 border border-slate-700/80 text-slate-500 flex items-center justify-center';
+          ? 'h-8 w-8 sm:h-9 sm:w-9 rounded-xl bg-slate-900 border border-slate-700/80 text-emerald-400 flex items-center justify-center'
+          : 'h-8 w-8 sm:h-9 sm:w-9 rounded-xl bg-slate-900 border border-slate-700/80 text-slate-500 flex items-center justify-center';
       });
 
       document.getElementById('btn-refresh').addEventListener('click', () => {
