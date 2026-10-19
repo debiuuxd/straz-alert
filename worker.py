@@ -14,8 +14,13 @@ from supabase import create_client
 # Twardy limit czasu na każde połączenie sieciowe (10 sekund), żeby skrypt nigdy nie zawisł
 socket.setdefaulttimeout(10)
 
-SUPABASE_URL = os.environ.get("SUPABASE_URL")
-SUPABASE_KEY = os.environ.get("SUPABASE_KEY") or os.environ.get("SUPABASE_SERVICE_KEY") or os.environ.get("SUPABASE_ANON_KEY")
+SUPABASE_URL = os.environ.get("SUPABASE_URL") or "https://cmjlebtqwyyplwdcklzn.supabase.co"
+SUPABASE_KEY = (
+    os.environ.get("SUPABASE_KEY") 
+    or os.environ.get("SUPABASE_SERVICE_KEY") 
+    or os.environ.get("SUPABASE_ANON_KEY") 
+    or "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNtamxlYnRxd3l5cGx3ZGNrbHpuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIxNTk5OTksImV4cCI6MjEwNzczNTk5OX0.YczVUJnRBcjMBdaKzgQij7MENxN6vDWfe8Btt2sP5-c"
+)
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
 NTFY_TOPIC_ALL = "straz-alert-polska-998"
