@@ -14,6 +14,13 @@ SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY") or os.environ.get("SUPABASE_SERVICE_KEY") or os.environ.get("SUPABASE_ANON_KEY")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
+# Dwa kanały powiadomień Push na zablokowany ekran (ntfy.sh)
+NTFY_TOPIC_ALL = "straz-alert-polska-998"
+NTFY_TOPIC_LOCAL = "straz-alert-lodzkie-998"
+
+# Adres Twojej aplikacji (otworzy się po dotknięciu powiadomienia na telefonie)
+APP_URL = "https://dawid1007.github.io/straz-alert/"
+
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 ai_client = genai.Client(api_key=GEMINI_API_KEY)
 
@@ -61,6 +68,51 @@ STOP_WORDS = {
     "ulicy", "droga", "powiat", "okolice", "łodzi", "łódź", "łowiczu", "łowicz", "policja",
     "kierowca", "szpitala", "szpitalu", "centrum", "nocny", "jedna", "osoba", "trafiła"
 }
+
+LOCAL_KEYWORDS = [
+    "stryków", "strykow", "zgierz", "zgierski", "głowno", "glowno", 
+    "łowicz", "lowicz", "kutno", "brzeziny", "łódź", "lodz", "łódzkie", 
+    "lodzkie", "a1", "a2", "dk14", "dk92", "skierniewic", "pabianic", "łęczyc"
+]
+
+def is_local_incident(title, location, region, lat, lng):
+    text = f"{title} {location} {region}".lower()
+    if any(k in text for k in LOCAL_KEYWORDS):
+        return True
+    try:
+        dist = math.hypot(float(lat) - 51.90, float(lng) - 19.60)
+        return dist < 0.65
+    except Exception:
+        return False
+
+def send_ntfy_push(topic, inc_data, is_local=False):
+    """Wysyła natywne powiadomienie Push (ntfy.sh) budzące zablokowany telefon."""
+    cat_emoji = "🔥" if inc_data["category"] == "fire" else ("🚗" if inc_data["category"] == "accident" else "⚠️")
+    prefix = "🚨 ALARM LOKALNY: " if is_local else f"{cat_emoji} "
+    body = (
+        f"📍 Miejsce: {inc_data['location']} ({inc_data['region']})\n"
+        f"🚒 SiŚ: {inc_data['units']}\n"
+        f"📝 {inc_data['description']}"
+    )
+    payload = {
+        "topic": topic,
+        "title": f"{prefix}{inc_data['title']}"[:110],
+        "message": body,
+        "priority": 4 if is_local else 3,
+        "tags": ["rotating_light", "fire_engine"],
+        "click": APP_URL
+    }
+    try:
+        req = urllib.request.Request(
+            "https://ntfy.sh/",
+            data=json.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST"
+        )
+        with urllib.request.urlopen(req, timeout=8) as _:
+            print(f"📲 Wysłano powiadomienie Push na kanał: {topic}")
+    except Exception as e:
+        print(f"⚠️ Błąd wysyłki Push ({topic}): {e}")
 
 def get_available_models():
     preferred = ["gemini-flash-lite-latest", "gemini-3.8-flash-lite", "gemini-3.8-flash", "gemini-flash-latest"]
@@ -120,7 +172,7 @@ def is_duplicate_recent(new_title, new_loc, new_cat, new_lat, new_lng, recent_in
     return False
 
 def run_worker():
-    print("Rozpoczynam skanowanie (z blokadą remontów i Pre-Duplikatorem)...")
+    print("Rozpoczynam skanowanie (z powiadomieniami Push ntfy.sh na zablokowany ekran)...")
     
     available_models = get_available_models()
     now_pl = datetime.now()
@@ -259,12 +311,15 @@ def run_worker():
                 inc_title = data.get("title", clean_title)[:120]
                 inc_loc = data.get("location", "Polska")
                 inc_cat = data.get("category", "hazard")
+                inc_reg = data.get("region", "Polska")
 
                 if is_duplicate_recent(inc_title, inc_loc, inc_cat, lat, lng, recent_incidents):
                     print(f"🔄 Anty-Duplikator zablokował powtórkę: {inc_title} ({inc_loc})")
                     continue
 
                 offset = ((hash(external_id) % 60) - 30) * 0.0003
+                final_lat = lat + offset
+                final_lng = lng + offset
 
                 insert_data = {
                     "external_id": external_id,
@@ -272,9 +327,9 @@ def run_worker():
                     "category": inc_cat,
                     "status": data.get("status", "Trwa akcja"),
                     "location": inc_loc,
-                    "region": data.get("region", "Polska"),
-                    "lat": lat + offset,
-                    "lng": lng + offset,
+                    "region": inc_reg,
+                    "lat": final_lat,
+                    "lng": final_lng,
                     "date_str": today_str,
                     "time_str": now_pl.strftime("%H:%M"),
                     "units": data.get("units", "PSP, OSP, Policja"),
@@ -285,6 +340,13 @@ def run_worker():
                 supabase.table('incidents').insert(insert_data).execute()
                 recent_incidents.insert(0, insert_data)
                 print(f"✅ SUKCES! Dodano na mapę: {inc_title} ({inc_loc})")
+
+                # 1. Wysyłka powiadomienia Push na kanał OGÓLNOPOLSKI
+                send_ntfy_push(NTFY_TOPIC_ALL, insert_data, is_local=False)
+
+                # 2. Jeśli zdarzenie jest w woj. łódzkim / okolicach Strykowa -> wysyłka na kanał LOKALNY
+                if is_local_incident(inc_title, inc_loc, inc_reg, final_lat, final_lng):
+                    send_ntfy_push(NTFY_TOPIC_LOCAL, insert_data, is_local=True)
 
             except Exception as e:
                 print(f"❌ Błąd zapisu: {e}")
