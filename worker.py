@@ -2,6 +2,7 @@ import os
 import re
 import json
 import math
+import socket
 import urllib.request
 import urllib.parse
 from datetime import datetime
@@ -10,19 +11,21 @@ from google import genai
 from google.genai import types
 from supabase import create_client
 
+# Twardy limit czasu na każde połączenie sieciowe (10 sekund), żeby skrypt nigdy nie zawisł
+socket.setdefaulttimeout(10)
+
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY") or os.environ.get("SUPABASE_SERVICE_KEY") or os.environ.get("SUPABASE_ANON_KEY")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
 NTFY_TOPIC_ALL = "straz-alert-polska-998"
 NTFY_TOPIC_LOCAL = "straz-alert-lodzkie-998"
-APP_URL = "https://dawid1007.github.io/straz-alert/"
+APP_URL = "https://debiuuxd.github.io/straz-alert/"
 
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 ai_client = genai.Client(api_key=GEMINI_API_KEY)
 
-# Tylko 3 szybkie modele bez pobierania długiej listy 30 modeli z serwera!
-FAST_MODELS = ["gemini-2.5-flash-lite", "gemini-2.5-flash", "gemini-2.0-flash"]
+FAST_MODELS = ["gemini-flash-lite-latest", "gemini-2.5-flash-lite", "gemini-2.5-flash", "gemini-2.0-flash"]
 
 RSS_FEEDS = [
     "https://news.google.com/rss/search?q=(site:lowiczanin.info+OR+site:tuzgierz.pl+OR+site:tulodz.pl+OR+site:expressilustrowany.pl+OR+site:dzienniklodzki.pl)+(stra%C5%BC+OR+po%C5%BCar+OR+wypadek+OR+kolizja+OR+zderzenie)+when:1d&hl=pl&gl=PL&ceid=PL:pl",
@@ -102,7 +105,7 @@ def send_ntfy_push(topic, inc_data, is_local=False):
             headers={"Content-Type": "application/json"},
             method="POST"
         )
-        with urllib.request.urlopen(req, timeout=5) as _:
+        with urllib.request.urlopen(req, timeout=6) as _:
             log(f"📲 Wysłano powiadomienie Push na kanał: {topic}")
     except Exception as e:
         log(f"⚠️ Błąd wysyłki Push ({topic}): {e}")
@@ -235,15 +238,14 @@ def run_worker():
                         contents=prompt,
                         config=types.GenerateContentConfig(
                             response_mime_type="application/json",
-                            temperature=0.1,
-                            http_options={"timeout": 12000}
+                            temperature=0.1
                         )
                     )
                     ai_calls_this_run += 1
                     log(f"   ✓ Odpowiedział model: {model_name}")
                     break
                 except Exception as err:
-                    log(f"   ⚠️ Model {model_name} niedostępny ({str(err)[:40]}), próbuję kolejny...")
+                    log(f"   ⚠️ Model {model_name} niedostępny ({str(err)[:35]}), próbuję kolejny...")
                     continue
 
             if not response:
