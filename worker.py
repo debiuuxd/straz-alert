@@ -14,30 +14,21 @@ SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY") or os.environ.get("SUPABASE_SERVICE_KEY") or os.environ.get("SUPABASE_ANON_KEY")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
-# Dwa kanały powiadomień Push na zablokowany ekran (ntfy.sh)
 NTFY_TOPIC_ALL = "straz-alert-polska-998"
 NTFY_TOPIC_LOCAL = "straz-alert-lodzkie-998"
-
-# Adres Twojej aplikacji (otworzy się po dotknięciu powiadomienia na telefonie)
 APP_URL = "https://dawid1007.github.io/straz-alert/"
 
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 ai_client = genai.Client(api_key=GEMINI_API_KEY)
 
-RSS_FEEDS = [
-    # 1. Lokalne portale z regionu (Łowiczanin, TuZgierz, TuŁódź, Express Ilustrowany, Dziennik Łódzki)
-    "https://news.google.com/rss/search?q=(site:lowiczanin.info+OR+site:tuzgierz.pl+OR+site:tulodz.pl+OR+site:expressilustrowany.pl+OR+site:dzienniklodzki.pl)+(stra%C5%BC+OR+po%C5%BCar+OR+wypadek+OR+kolizja+OR+zderzenie)+when:1d&hl=pl&gl=PL&ceid=PL:pl",
+# Tylko 3 szybkie modele bez pobierania długiej listy 30 modeli z serwera!
+FAST_MODELS = ["gemini-2.5-flash-lite", "gemini-2.5-flash", "gemini-2.0-flash"]
 
-    # 2. Okolice: Stryków, Głowno, Zgierz, Łódź, Brzeziny, Łowicz, Kutno, powiat zgierski
+RSS_FEEDS = [
+    "https://news.google.com/rss/search?q=(site:lowiczanin.info+OR+site:tuzgierz.pl+OR+site:tulodz.pl+OR+site:expressilustrowany.pl+OR+site:dzienniklodzki.pl)+(stra%C5%BC+OR+po%C5%BCar+OR+wypadek+OR+kolizja+OR+zderzenie)+when:1d&hl=pl&gl=PL&ceid=PL:pl",
     "https://news.google.com/rss/search?q=(wypadek+OR+po%C5%BCar+OR+kolizja+OR+stra%C5%BC+OR+zderzenie)+(Stryk%C3%B3w+OR+G%C5%82owno+OR+Zgierz+OR+%C5%81%C3%B3d%C5%BA+OR+zgierski+OR+%C5%81owicz+OR+Kutno+OR+Brzeziny)+when:1d&hl=pl&gl=PL&ceid=PL:pl",
-    
-    # 3. Autostrady A1 i A2 oraz główne drogi w woj. łódzkim
     "https://news.google.com/rss/search?q=(wypadek+OR+po%C5%BCar+OR+zablokowana+OR+dachowanie+OR+zderzenie)+(A1+OR+A2+OR+S8+OR+S14+OR+DK14+OR+DK92+OR+%C5%82%C3%B3dzkie)+when:1d&hl=pl&gl=PL&ceid=PL:pl",
-    
-    # 4. Ogólnopolski portal strażacki Remiza.com.pl
     "https://remiza.com.pl/feed/",
-    
-    # 5. Ogólnopolskie akcje straży pożarnej z ostatnich 24h
     "https://news.google.com/rss/search?q=(stra%C5%BC+po%C5%BCarna+OR+JRG+OR+OSP)+(po%C5%BCar+OR+wypadek+OR+zderzenie+OR+interwencja)+when:1d&hl=pl&gl=PL&ceid=PL:pl"
 ]
 
@@ -75,6 +66,9 @@ LOCAL_KEYWORDS = [
     "lodzkie", "a1", "a2", "dk14", "dk92", "skierniewic", "pabianic", "łęczyc"
 ]
 
+def log(msg):
+    print(msg, flush=True)
+
 def is_local_incident(title, location, region, lat, lng):
     text = f"{title} {location} {region}".lower()
     if any(k in text for k in LOCAL_KEYWORDS):
@@ -86,7 +80,6 @@ def is_local_incident(title, location, region, lat, lng):
         return False
 
 def send_ntfy_push(topic, inc_data, is_local=False):
-    """Wysyła natywne powiadomienie Push (ntfy.sh) budzące zablokowany telefon."""
     cat_emoji = "🔥" if inc_data["category"] == "fire" else ("🚗" if inc_data["category"] == "accident" else "⚠️")
     prefix = "🚨 ALARM LOKALNY: " if is_local else f"{cat_emoji} "
     body = (
@@ -109,24 +102,10 @@ def send_ntfy_push(topic, inc_data, is_local=False):
             headers={"Content-Type": "application/json"},
             method="POST"
         )
-        with urllib.request.urlopen(req, timeout=8) as _:
-            print(f"📲 Wysłano powiadomienie Push na kanał: {topic}")
+        with urllib.request.urlopen(req, timeout=5) as _:
+            log(f"📲 Wysłano powiadomienie Push na kanał: {topic}")
     except Exception as e:
-        print(f"⚠️ Błąd wysyłki Push ({topic}): {e}")
-
-def get_available_models():
-    preferred = ["gemini-flash-lite-latest", "gemini-3.8-flash-lite", "gemini-3.8-flash", "gemini-flash-latest"]
-    try:
-        for m in ai_client.models.list():
-            name = m.name.replace("models/", "")
-            if "gemini" in name and ("flash" in name or "pro" in name):
-                if any(bad in name for bad in ["tts", "vision", "embedding", "audio", "image", "thinking"]):
-                    continue
-                if name not in preferred:
-                    preferred.append(name)
-    except Exception:
-        pass
-    return preferred
+        log(f"⚠️ Błąd wysyłki Push ({topic}): {e}")
 
 def extract_keywords(text):
     clean = re.sub(r'[^a-ząćęłńóśźż0-9\s]', ' ', text.lower())
@@ -136,76 +115,67 @@ def is_pre_duplicate(raw_title, recent_incidents, seen_in_this_run):
     kw1 = extract_keywords(raw_title)
     if len(kw1) < 2:
         return False
-
     for seen_kw in seen_in_this_run:
         if len(kw1 & seen_kw) >= 2:
             return True
-
     for inc in recent_incidents:
         inc_text = f"{inc.get('title', '')} {inc.get('description', '')}"
         kw2 = extract_keywords(inc_text)
         if len(kw1 & kw2) >= 2:
             return True
-
     return False
 
 def is_duplicate_recent(new_title, new_loc, new_cat, new_lat, new_lng, recent_incidents):
     t1 = new_title.lower().strip()
     kw1 = extract_keywords(new_title)
-
     for inc in recent_incidents:
         t2 = (inc.get("title") or "").lower().strip()
         cat2 = inc.get("category")
-
         if t1 == t2:
             return True
-
         kw2 = extract_keywords(t2)
         if len(kw1 & kw2) >= 2 and new_cat == cat2:
             return True
-
         if new_cat == cat2 and inc.get("lat") and inc.get("lng"):
             dist = math.hypot(new_lat - float(inc["lat"]), new_lng - float(inc["lng"]))
             if dist < 0.015:
                 return True
-
     return False
 
 def run_worker():
-    print("Rozpoczynam skanowanie (z powiadomieniami Push ntfy.sh na zablokowany ekran)...")
-    
-    available_models = get_available_models()
+    log("🚀 Start szybkiego skanowania (Logi na żywo + Push ntfy.sh)...")
     now_pl = datetime.now()
     today_str = now_pl.strftime("%Y-%m-%d")
 
-    existing_res = supabase.table('incidents').select('id, external_id, title, description, location, category, lat, lng, date_str').order('id', desc=True).limit(400).execute()
+    existing_res = supabase.table('incidents').select('id, external_id, title, description, location, category, lat, lng, date_str').order('id', desc=True).limit(350).execute()
     all_rows = existing_res.data or []
     existing_ids = set(r['external_id'] for r in all_rows if r.get('external_id'))
     recent_incidents = all_rows[:60]
 
-    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/124.0.0.0 Safari/537.36'}
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/124.0.0.0'}
     ai_calls_this_run = 0
-    MAX_AI_CALLS_PER_RUN = 12
+    MAX_AI_CALLS_PER_RUN = 8
     seen_in_this_run = []
 
     for feed_url in RSS_FEEDS:
         if ai_calls_this_run >= MAX_AI_CALLS_PER_RUN:
+            log("⏹️ Osiągnięto limit 8 analiz AI w tym cyklu.")
             break
 
-        print(f"\nSkanuję źródło: {feed_url[:68]}...")
+        log(f"\n📡 Skanuję kanał: {feed_url[:65]}...")
         try:
             req = urllib.request.Request(feed_url, headers=headers)
-            with urllib.request.urlopen(req, timeout=15) as resp:
+            with urllib.request.urlopen(req, timeout=8) as resp:
                 xml_data = resp.read()
             parsed_feed = feedparser.parse(xml_data)
         except Exception as e:
-            print(f"Błąd pobierania RSS: {e}")
+            log(f"⚠️ Błąd pobierania RSS: {e}")
             continue
 
         entries = list(parsed_feed.entries)
         entries.sort(key=lambda x: x.get('published_parsed') or (0,), reverse=True)
 
-        for entry in entries[:20]:
+        for entry in entries[:15]:
             if ai_calls_this_run >= MAX_AI_CALLS_PER_RUN:
                 break
 
@@ -229,11 +199,11 @@ def run_worker():
                 continue
 
             if is_pre_duplicate(clean_title, recent_incidents, seen_in_this_run):
-                print(f"⏭️ Pominięto przed AI (temat jest już w bazie): {clean_title[:60]}...")
+                log(f"⏭️ Pominięto przed AI (już w bazie): {clean_title[:55]}...")
                 existing_ids.add(external_id)
                 continue
 
-            print(f"🔍 Analizuję przez AI nowy wpis: {title}")
+            log(f"🔍 Analizuję przez AI: {clean_title[:65]}...")
 
             prompt = f"""
             Przeanalizuj poniższy artykuł prasowy o zdarzeniu w Polsce.
@@ -258,23 +228,26 @@ def run_worker():
             """
 
             response = None
-            for model_name in available_models:
+            for model_name in FAST_MODELS:
                 try:
                     response = ai_client.models.generate_content(
                         model=model_name,
                         contents=prompt,
                         config=types.GenerateContentConfig(
                             response_mime_type="application/json",
-                            temperature=0.1
+                            temperature=0.1,
+                            http_options={"timeout": 12000}
                         )
                     )
                     ai_calls_this_run += 1
-                    print(f"   (Odpowiedział model: {model_name})")
+                    log(f"   ✓ Odpowiedział model: {model_name}")
                     break
-                except Exception:
+                except Exception as err:
+                    log(f"   ⚠️ Model {model_name} niedostępny ({str(err)[:40]}), próbuję kolejny...")
                     continue
 
             if not response:
+                log("❌ Chwilowy brak wolnego limitu AI – kończę ten cykl.")
                 return
 
             try:
@@ -289,7 +262,7 @@ def run_worker():
                 seen_in_this_run.append(extract_keywords(clean_title))
 
                 if not data.get("is_incident", False):
-                    print("-> AI odrzuciło (remont drogi lub brak akcji ratowniczej).")
+                    log("   -> AI odrzuciło (brak akcji ratowniczej).")
                     continue
 
                 lat = float(data.get("estimated_lat") or 51.90)
@@ -300,7 +273,7 @@ def run_worker():
                     geo_url = f"https://nominatim.openstreetmap.org/search?q={urllib.parse.quote(geo_q + ', Polska')}&format=json&limit=1"
                     geo_req = urllib.request.Request(geo_url, headers={'User-Agent': 'StrazAlertApp/1.0'})
                     try:
-                        with urllib.request.urlopen(geo_req, timeout=10) as geo_res:
+                        with urllib.request.urlopen(geo_req, timeout=5) as geo_res:
                             geo_data = json.loads(geo_res.read().decode())
                             if geo_data and len(geo_data) > 0:
                                 lat = float(geo_data[0]['lat'])
@@ -314,7 +287,7 @@ def run_worker():
                 inc_reg = data.get("region", "Polska")
 
                 if is_duplicate_recent(inc_title, inc_loc, inc_cat, lat, lng, recent_incidents):
-                    print(f"🔄 Anty-Duplikator zablokował powtórkę: {inc_title} ({inc_loc})")
+                    log(f"🔄 Anty-Duplikator zablokował powtórkę: {inc_title} ({inc_loc})")
                     continue
 
                 offset = ((hash(external_id) % 60) - 30) * 0.0003
@@ -339,17 +312,16 @@ def run_worker():
 
                 supabase.table('incidents').insert(insert_data).execute()
                 recent_incidents.insert(0, insert_data)
-                print(f"✅ SUKCES! Dodano na mapę: {inc_title} ({inc_loc})")
+                log(f"✅ SUKCES! Dodano na mapę: {inc_title} ({inc_loc})")
 
-                # 1. Wysyłka powiadomienia Push na kanał OGÓLNOPOLSKI
                 send_ntfy_push(NTFY_TOPIC_ALL, insert_data, is_local=False)
-
-                # 2. Jeśli zdarzenie jest w woj. łódzkim / okolicach Strykowa -> wysyłka na kanał LOKALNY
                 if is_local_incident(inc_title, inc_loc, inc_reg, final_lat, final_lng):
                     send_ntfy_push(NTFY_TOPIC_LOCAL, insert_data, is_local=True)
 
             except Exception as e:
-                print(f"❌ Błąd zapisu: {e}")
+                log(f"❌ Błąd zapisu: {e}")
+
+    log("🏁 Skanowanie zakończone pomyślnie!")
 
 if __name__ == "__main__":
     run_worker()
