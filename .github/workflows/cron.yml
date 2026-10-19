@@ -2,22 +2,32 @@ name: Straz Alert AI Worker
 
 on:
   schedule:
-    - cron: '*/10 * * * *' # Odpalaj w tle co 10 minut 24/7
-  workflow_dispatch:       # Pozwala też odpalić skrypt ręcznie jednym przyciskiem
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: straz-worker
+  cancel-in-progress: true
 
 jobs:
   scrape-and-analyze:
     runs-on: ubuntu-latest
+    timeout-minutes: 2
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: Pobierz kod
+        uses: actions/checkout@v4
+
+      - name: Zainstaluj Python
+        uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Instalacja bibliotek
-        run: pip install google-genai supabase feedparser requests
+
+      - name: Zainstaluj biblioteki
+        run: pip install feedparser google-genai supabase
+
       - name: Uruchomienie skryptu AI
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-        run: python worker.py
+        run: python -u worker.py
