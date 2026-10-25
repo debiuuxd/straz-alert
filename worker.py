@@ -13,7 +13,6 @@ from google import genai
 from google.genai import types
 from supabase import create_client
 
-# Twardy limit czasu na każde połączenie sieciowe (10 sekund), żeby skrypt nigdy nie zawisł
 socket.setdefaulttimeout(10)
 
 SUPABASE_URL = os.environ.get("SUPABASE_URL") or "https://cmjlebtqwyyplwdcklzn.supabase.co"
@@ -29,7 +28,6 @@ NTFY_TOPIC_ALL = "straz-alert-polska-998"
 NTFY_TOPIC_LOCAL = "straz-alert-lodzkie-998"
 APP_URL = "https://debiuuxd.github.io/straz-alert/"
 
-# Oficjalny kanał RSS Komendy Wojewódzkiej PSP w Łodzi
 PSP_LODZ_FEED = "https://interwencje.straz.lodz.pl/feed"
 
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
@@ -38,9 +36,12 @@ ai_client = genai.Client(api_key=GEMINI_API_KEY)
 FAST_MODELS = ["gemini-flash-lite-latest", "gemini-2.5-flash-lite", "gemini-2.5-flash", "gemini-2.0-flash"]
 
 RSS_FEEDS = [
-    "https://remiza.com.pl/feed/",
+    # 1. Google News zmuszony do indeksowania samej strony interwencji PSP Łódź:
+    "https://news.google.com/rss/search?q=site:interwencje.straz.lodz.pl+OR+site:straz.lodz.pl&hl=pl&gl=PL&ceid=PL:pl",
+    # 2. Lokalne portale i trasy wokół Strykowa i Głowna:
     "https://news.google.com/rss/search?q=(wypadek+OR+po%C5%BCar+OR+kolizja+OR+stra%C5%BC+OR+zderzenie)+(Stryk%C3%B3w+OR+G%C5%82owno+OR+Bratoszewice+OR+Dmosin+OR+Niesu%C5%82k%C3%B3w)+when:1d&hl=pl&gl=PL&ceid=PL:pl",
     "https://news.google.com/rss/search?q=(wypadek+OR+po%C5%BCar+OR+zablokowana+OR+dachowanie+OR+zderzenie)+(A1+OR+A2+OR+DK14+OR+DK92)+(Stryk%C3%B3w+OR+G%C5%82owno+OR+%C5%81owicz+OR+Sosnowiec)+when:1d&hl=pl&gl=PL&ceid=PL:pl",
+    "https://remiza.com.pl/feed/",
     "https://news.google.com/rss/search?q=(stra%C5%BC+po%C5%BCarna+OR+JRG+OR+OSP)+(po%C5%BCar+OR+wypadek+OR+zderzenie+OR+interwencja)+when:1d&hl=pl&gl=PL&ceid=PL:pl"
 ]
 
@@ -76,7 +77,6 @@ STOP_WORDS = {
 }
 
 STRICT_LOCAL_TOWNS = {
-    # Gmina Stryków:
     "stryków", "strykow", "strykowie", "strykowa",
     "niesułków", "niesulkow", "nowostawy", "swędów", "swedow", "bratoszewice",
     "dobra", "dobrej", "sosnowiec", "kiełmina", "kielmina", "kalinów", "kalinow",
@@ -84,13 +84,11 @@ STRICT_LOCAL_TOWNS = {
     "zelgoszcz", "wyskoki", "anielin", "bartolin", "cesarka", "ciołek", "ciolek",
     "krucice", "lipka", "ługi", "lugi", "michałówek", "michalowek", "orzechówek", "orzechowek",
     "rokitnica", "sierżnia", "sierznia", "wola błędowa", "zagłoba", "zagloba", "zarębów", "zarebow",
-    # Miasto i Gmina Głowno:
     "głowno", "glowno", "głownie", "glownie", "głowna", "glowna",
     "ostrołęka", "lubianków", "lubiankow", "mąkolice", "makolice", "wola zbrożkowa",
     "popów", "popow", "kadzielin", "bronisławów", "bronislawow", "albinów", "albinow",
     "boczki", "chlebowice", "domaradzyn", "glinnik", "helenów", "helenow", "konarzew",
     "rudniczek", "ziewanice", "wola łokotowa", "antoniew", "gawronki", "jasionna", "karasica",
-    # Gmina Dmosin:
     "dmosin", "dmosinie", "nadolna", "szczecin", "kołacin", "kolacin", "kołacinek", "kolacinek",
     "lubowidza", "wola cyrusowa", "kuźmy", "kuzmy", "grodzisk", "kraszew", "borkowizna"
 }
@@ -176,56 +174,35 @@ def geocode_place(query_str, geo_cache):
     return lat, lng
 
 def fetch_psp_lodz_entries():
-    """
-    Pobiera kanał PSP Łódź. Ponieważ serwer straz.lodz.pl blokuje amerykańskie IP GitHuba (timeout),
-    używamy kaskady bramek proxy, które omijają blokadę geograficzną.
-    """
     ctx = ssl.create_default_context()
     ctx.check_hostname = False
     ctx.verify_mode = ssl.CERT_NONE
 
     pl_headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
-        'Accept': 'application/rss+xml, application/xml, text/xml, */*',
-        'Accept-Language': 'pl-PL,pl;q=0.9'
+        'User-Agent': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
+        'Accept': '*/*',
+        'Accept-Language': 'pl-PL,pl;q=0.9',
+        'X-Forwarded-For': '83.8.0.1'
     }
 
     encoded_url = urllib.parse.quote(PSP_LODZ_FEED, safe='')
     
-    # Lista źródeł (bezpośrednie + 3 niezależne bramki omijające blokadę IP z USA)
     endpoints = [
-        ("Bezpośrednio", PSP_LODZ_FEED, "xml", 4),
-        ("Proxy AllOrigins", f"https://api.allorigins.win/raw?url={encoded_url}", "xml", 8),
-        ("Proxy CodeTabs", f"https://api.codetabs.com/v1/proxy?quest={PSP_LODZ_FEED}", "xml", 8),
-        ("Proxy RSS2JSON", f"https://api.rss2json.com/v1/api.json?rss_url={encoded_url}", "json", 8),
+        ("Google Translate Proxy", "https://interwencje-straz-lodz-pl.translate.goog/feed?_x_tr_sl=pl&_x_tr_tl=pl&_x_tr_hl=pl", 6),
+        ("Corsfix Proxy", f"https://proxy.corsfix.com/?{PSP_LODZ_FEED}", 6),
+        ("ThingProxy", f"https://thingproxy.freeboard.io/fetch/{PSP_LODZ_FEED}", 6),
+        ("Jina Reader", f"https://r.jina.ai/{PSP_LODZ_FEED}", 8),
     ]
 
-    for label, url, fmt, tout in endpoints:
+    for label, url, tout in endpoints:
         try:
             req = urllib.request.Request(url, headers=pl_headers)
             with urllib.request.urlopen(req, timeout=tout, context=ctx) as resp:
                 raw_bytes = resp.read()
-
-            if fmt == "json":
-                jdata = json.loads(raw_bytes.decode('utf-8', errors='ignore'))
-                items = jdata.get("items") or []
-                if items:
-                    log(f"   ✓ Pobrano wykaz PSP Łódź przez: {label} ({len(items)} wpisów)")
-                    converted = []
-                    for it in items:
-                        converted.append({
-                            'id': it.get('guid') or it.get('link'),
-                            'title': it.get('title', ''),
-                            'description': it.get('description', ''),
-                            'link': it.get('link', PSP_LODZ_FEED),
-                            'published': it.get('pubDate', '')
-                        })
-                    return converted
-            else:
-                parsed = feedparser.parse(raw_bytes)
-                if parsed.entries and len(parsed.entries) > 0:
-                    log(f"   ✓ Pobrano wykaz PSP Łódź przez: {label} ({len(parsed.entries)} wpisów)")
-                    return list(parsed.entries)
+            parsed = feedparser.parse(raw_bytes)
+            if parsed.entries and len(parsed.entries) > 0:
+                log(f"   ✓ Pobrano wykaz PSP Łódź przez: {label} ({len(parsed.entries)} wpisów)")
+                return list(parsed.entries)
         except Exception as e:
             log(f"   ↪ Próba ({label}) nieudana: {str(e)[:45]}...")
             continue
@@ -236,7 +213,7 @@ def process_psp_lodz_feed(existing_ids, recent_incidents, today_str, now_pl, hea
     log(f"\n🚒 [PSP ŁÓDŹ] Pobieram oficjalny wykaz interwencji: {PSP_LODZ_FEED}...")
     entries = fetch_psp_lodz_entries()
     if not entries:
-        log("⚠️ Nie udało się pobrać kanału PSP Łódź w tym cyklu (serwer straży nie odpowiada).")
+        log("⚠️ Serwer PSP Łódź odrzucił wszystkie bramki z USA (silny Geo-blocking na Polskę).")
         return
 
     added_psp = 0
@@ -388,10 +365,8 @@ def run_worker():
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/124.0.0.0'}
     geo_cache = {}
 
-    # KROK 1: Oficjalny kanał PSP Łódź (przez kaskadę proxy omijającą blokadę USA)
     process_psp_lodz_feed(existing_ids, recent_incidents, today_str, now_pl, headers, geo_cache)
 
-    # KROK 2: Skanowanie mediów z Polski i z tras przelotowych
     ai_calls_this_run = 0
     MAX_AI_CALLS_PER_RUN = 8
     seen_in_this_run = []
