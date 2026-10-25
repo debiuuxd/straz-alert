@@ -3,6 +3,7 @@ import re
 import json
 import math
 import socket
+import ssl
 import urllib.request
 import urllib.parse
 from datetime import datetime
@@ -36,7 +37,6 @@ ai_client = genai.Client(api_key=GEMINI_API_KEY)
 
 FAST_MODELS = ["gemini-flash-lite-latest", "gemini-2.5-flash-lite", "gemini-2.5-flash", "gemini-2.0-flash"]
 
-# Kanały dla reszty Polski oraz uzupełniające z tras (A1/A2/DK14)
 RSS_FEEDS = [
     "https://remiza.com.pl/feed/",
     "https://news.google.com/rss/search?q=(wypadek+OR+po%C5%BCar+OR+kolizja+OR+stra%C5%BC+OR+zderzenie)+(Stryk%C3%B3w+OR+G%C5%82owno+OR+Bratoszewice+OR+Dmosin+OR+Niesu%C5%82k%C3%B3w)+when:1d&hl=pl&gl=PL&ceid=PL:pl",
@@ -44,7 +44,6 @@ RSS_FEEDS = [
     "https://news.google.com/rss/search?q=(stra%C5%BC+po%C5%BCarna+OR+JRG+OR+OSP)+(po%C5%BCar+OR+wypadek+OR+zderzenie+OR+interwencja)+when:1d&hl=pl&gl=PL&ceid=PL:pl"
 ]
 
-# Czarna lista słów (w tym procesy sądowe, Sebastian M., remonty dróg - bez wycinania pijanych kierowców z dzisiaj!)
 IGNORE_TITLE_WORDS = [
     "zbiórka", "nieśmiertelniki", "ślubowanie", "awans", "odznaczenia", 
     "przetarg", "wspomnienie", "rocznica", "pogrzeb", "żegnają", 
@@ -55,7 +54,6 @@ IGNORE_TITLE_WORDS = [
     "kanada", "kanady", "albercie", "usa", "niemczech", "ukrain",
     "rozbudowa", "przebudowa", "remont", "objazdy", "odcinkowe", 
     "zmieni przejazd", "potrwają do", "nowej remizie", "nowa remiza",
-    # Blokada na stare sprawy sądowe i Sebastiana M.:
     "sebastian m", "sebastiana m", "ekstradycj", "akt oskarżenia", "aktem oskarżenia",
     "ławie oskarżonych", "przed sądem", "ruszył proces", "proces w sprawie",
     "wznowiono proces", "opinia biegłych", "biegli o wypadku", "prawomocny wyrok",
@@ -77,8 +75,6 @@ STOP_WORDS = {
     "kierowca", "szpitala", "szpitalu", "centrum", "nocny", "jedna", "osoba", "trafiła"
 }
 
-# ŚCISŁA STREFA POWIADOMIEŃ PUSH: Tylko Gmina Stryków, Miasto/Gmina Głowno, Gmina Dmosin i trasa między nimi
-# (Bez miasta Łódź, bez Zgierza i bez samego Łowicza!)
 STRICT_LOCAL_TOWNS = {
     # Gmina Stryków:
     "stryków", "strykow", "strykowie", "strykowa",
@@ -94,7 +90,7 @@ STRICT_LOCAL_TOWNS = {
     "popów", "popow", "kadzielin", "bronisławów", "bronislawow", "albinów", "albinow",
     "boczki", "chlebowice", "domaradzyn", "glinnik", "helenów", "helenow", "konarzew",
     "rudniczek", "ziewanice", "wola łokotowa", "antoniew", "gawronki", "jasionna", "karasica",
-    # Gmina Dmosin (na trasie Stryków - Głowno - Łowicz):
+    # Gmina Dmosin:
     "dmosin", "dmosinie", "nadolna", "szczecin", "kołacin", "kolacin", "kołacinek", "kolacinek",
     "lubowidza", "wola cyrusowa", "kuźmy", "kuzmy", "grodzisk", "kraszew", "borkowizna"
 }
@@ -103,37 +99,26 @@ def log(msg):
     print(msg, flush=True)
 
 def is_local_incident(title, location, region, lat, lng):
-    """
-    Sprawdza, czy zdarzenie ma wysłać powiadomienie PUSH na telefon (kanał straz-alert-lodzkie-998).
-    Budzi telefon TYLKO dla Gm. Stryków, Gm. Głowno, Gm. Dmosin oraz trasy między nimi.
-    Łódź, Zgierz i sam Łowicz są wykluczone z budzenia telefonu!
-    """
     loc_clean = location.lower().strip()
     full_text = f"{title} {location}".lower()
 
-    # Twarda blokada wyciszenia dla dużych sąsiednich miast
     if loc_clean in ["łódź", "lodz", "zgierz", "łowicz", "lowicz", "pabianice", "kutno", "skierniewice", "brzeziny"]:
         return False
 
-    # 1. Jeśli nazwa miejscowości z PSP Łódź dokładnie pokrywa się z naszą listą wsi i miast (Stryków/Głowno/Dmosin)
     if loc_clean in STRICT_LOCAL_TOWNS:
         return True
 
-    # 2. Jeśli w tytule lub lokalizacji pada nazwa z naszej ścisłej listy
     for town in STRICT_LOCAL_TOWNS:
         if len(town) >= 5 and re.search(r'\b' + re.escape(town) + r'\b', full_text):
             return True
 
-    # 3. Jeśli artykuł prasowy dotyczy trasy DK14/A2/A1 na odcinku Stryków - Głowno - Łowicz
     if any(road in full_text for road in ["dk14", "dk 14", "k14", "a2", "a1", "węzeł łódź północ", "łódź północ"]):
         if any(w in full_text for w in ["stryków", "strykowie", "strykowa", "głowno", "głownie", "głowna", "dmosin", "sosnowiec", "łowicz"]):
             return True
 
-    # 4. Bardzo ciasny promień GPS (ok. 10-12 km wokół osi Stryków - Głowno), z wyłączeniem Zgierza i Łodzi
     try:
         f_lat = float(lat)
         f_lng = float(lng)
-        # Odcięcie od południa (Łódź) i zachodu (Zgierz):
         if f_lat >= 51.85 and f_lng >= 19.53:
             dist_strykow = math.hypot(f_lat - 51.901, f_lng - 19.602)
             dist_glowno = math.hypot(f_lat - 51.964, f_lng - 19.712)
@@ -190,25 +175,72 @@ def geocode_place(query_str, geo_cache):
         pass
     return lat, lng
 
+def fetch_psp_lodz_entries():
+    """
+    Pobiera kanał PSP Łódź. Ponieważ serwer straz.lodz.pl blokuje amerykańskie IP GitHuba (timeout),
+    używamy kaskady bramek proxy, które omijają blokadę geograficzną.
+    """
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+
+    pl_headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+        'Accept': 'application/rss+xml, application/xml, text/xml, */*',
+        'Accept-Language': 'pl-PL,pl;q=0.9'
+    }
+
+    encoded_url = urllib.parse.quote(PSP_LODZ_FEED, safe='')
+    
+    # Lista źródeł (bezpośrednie + 3 niezależne bramki omijające blokadę IP z USA)
+    endpoints = [
+        ("Bezpośrednio", PSP_LODZ_FEED, "xml", 4),
+        ("Proxy AllOrigins", f"https://api.allorigins.win/raw?url={encoded_url}", "xml", 8),
+        ("Proxy CodeTabs", f"https://api.codetabs.com/v1/proxy?quest={PSP_LODZ_FEED}", "xml", 8),
+        ("Proxy RSS2JSON", f"https://api.rss2json.com/v1/api.json?rss_url={encoded_url}", "json", 8),
+    ]
+
+    for label, url, fmt, tout in endpoints:
+        try:
+            req = urllib.request.Request(url, headers=pl_headers)
+            with urllib.request.urlopen(req, timeout=tout, context=ctx) as resp:
+                raw_bytes = resp.read()
+
+            if fmt == "json":
+                jdata = json.loads(raw_bytes.decode('utf-8', errors='ignore'))
+                items = jdata.get("items") or []
+                if items:
+                    log(f"   ✓ Pobrano wykaz PSP Łódź przez: {label} ({len(items)} wpisów)")
+                    converted = []
+                    for it in items:
+                        converted.append({
+                            'id': it.get('guid') or it.get('link'),
+                            'title': it.get('title', ''),
+                            'description': it.get('description', ''),
+                            'link': it.get('link', PSP_LODZ_FEED),
+                            'published': it.get('pubDate', '')
+                        })
+                    return converted
+            else:
+                parsed = feedparser.parse(raw_bytes)
+                if parsed.entries and len(parsed.entries) > 0:
+                    log(f"   ✓ Pobrano wykaz PSP Łódź przez: {label} ({len(parsed.entries)} wpisów)")
+                    return list(parsed.entries)
+        except Exception as e:
+            log(f"   ↪ Próba ({label}) nieudana: {str(e)[:45]}...")
+            continue
+
+    return []
+
 def process_psp_lodz_feed(existing_ids, recent_incidents, today_str, now_pl, headers, geo_cache):
-    """
-    Pobiera i rozkodowuje bezpośredni kanał RSS z systemu dyspozytorskiego KW PSP w Łodzi
-    (https://interwencje.straz.lodz.pl/feed) bez używania limitu zapytań AI!
-    """
     log(f"\n🚒 [PSP ŁÓDŹ] Pobieram oficjalny wykaz interwencji: {PSP_LODZ_FEED}...")
-    try:
-        req = urllib.request.Request(PSP_LODZ_FEED, headers=headers)
-        with urllib.request.urlopen(req, timeout=8) as resp:
-            xml_data = resp.read()
-        parsed_feed = feedparser.parse(xml_data)
-    except Exception as e:
-        log(f"⚠️ Błąd pobierania RSS PSP Łódź: {e}")
+    entries = fetch_psp_lodz_entries()
+    if not entries:
+        log("⚠️ Nie udało się pobrać kanału PSP Łódź w tym cyklu (serwer straży nie odpowiada).")
         return
 
-    entries = list(parsed_feed.entries)
     added_psp = 0
 
-    # Przetwarzamy od najstarszych z ostatnich 30 wpisów, by zachować chronologię
     for entry in reversed(entries[:30]):
         external_id = entry.get('id') or entry.get('guid') or entry.get('link')
         raw_title = (entry.get('title') or '').strip()
@@ -218,9 +250,6 @@ def process_psp_lodz_feed(existing_ids, recent_incidents, today_str, now_pl, hea
         if not external_id or not raw_title or external_id in existing_ids:
             continue
 
-        # Format w RSS PSP Łódź to np.:
-        # <title>Miejscowe zagrożenie - Ozorków</title>
-        # <description>MZ - Kolizja</description>
         if " - " in raw_title:
             main_type, town = raw_title.split(" - ", 1)
             main_type = main_type.strip()
@@ -229,7 +258,7 @@ def process_psp_lodz_feed(existing_ids, recent_incidents, today_str, now_pl, hea
             main_type = raw_title
             town = "woj. łódzkie"
 
-        sub_type = raw_desc
+        sub_type = re.sub(r'<[^>]+>', '', raw_desc).strip()
         if sub_type.startswith("MZ - ") or sub_type.startswith("P - ") or sub_type.startswith("AF - "):
             sub_type = sub_type.split(" - ", 1)[1].strip()
         if sub_type.lower() in ["brak", "", "inne mz", "inne pożary"]:
@@ -240,7 +269,6 @@ def process_psp_lodz_feed(existing_ids, recent_incidents, today_str, now_pl, hea
         mt_lower = main_type.lower()
         st_lower = sub_type.lower()
 
-        # Dobór kategorii ikony na mapie + tytułu i opisu (w tym wyraźne oznaczenie Alarmów Fałszywych!)
         if "pożar" in mt_lower:
             category = "fire"
             nice_title = f"Pożar ({sub_type_clean}) – {town}" if sub_type_clean else f"Pożar – {town}"
@@ -259,7 +287,6 @@ def process_psp_lodz_feed(existing_ids, recent_incidents, today_str, now_pl, hea
                 nice_title = f"Miejscowe zagrożenie ({sub_type_clean}) – {town}" if sub_type_clean else f"Miejscowe zagrożenie – {town}"
                 nice_desc = f"Interwencja straży pożarnej w m. {town}. Rodzaj zagrożenia: {raw_desc if raw_desc != 'Brak' else 'Miejscowe zagrożenie'}."
 
-        # Wyciągnięcie daty i godziny ze znacznika RSS (jeśli dostępny)
         inc_date = today_str
         inc_time = now_pl.strftime("%H:%M")
         pub_str = entry.get('published') or entry.get('updated')
@@ -271,11 +298,9 @@ def process_psp_lodz_feed(existing_ids, recent_incidents, today_str, now_pl, hea
             except Exception:
                 pass
 
-        # Geokodowanie miejscowości w woj. łódzkim
         geo_query = f"{town}, województwo łódzkie, Polska"
         lat, lng = geocode_place(geo_query, geo_cache)
 
-        # Lekkie rozsunięcie pinezek w tej samej miejscowości, żeby nie nakładały się w jednym punkcie
         offset_lat = ((hash(external_id) % 70) - 35) * 0.00035
         offset_lng = (((hash(external_id + "x") % 70) - 35)) * 0.00035
         final_lat = lat + offset_lat
@@ -304,12 +329,9 @@ def process_psp_lodz_feed(existing_ids, recent_incidents, today_str, now_pl, hea
             added_psp += 1
             log(f"✅ [PSP ŁÓDŹ] Dodano na mapę: {nice_title}")
 
-            # Powiadomienie Push:
-            # 1. Na kanał ogólnopolski wysyłamy wyjazdy z wyjątkiem fałszywych alarmów
             if "alarm fałszywy" not in mt_lower:
                 send_ntfy_push(NTFY_TOPIC_ALL, insert_data, is_local=False)
 
-            # 2. Na Twój kanał lokalny (straz-alert-lodzkie-998) wysyłamy TYLKO Gminę Stryków, Głowno i Dmosin!
             if is_local_incident(nice_title, town, "łódzkie", final_lat, final_lng):
                 send_ntfy_push(NTFY_TOPIC_LOCAL, insert_data, is_local=True)
 
@@ -366,7 +388,7 @@ def run_worker():
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/124.0.0.0'}
     geo_cache = {}
 
-    # KROK 1: Oficjalny kanał PSP Łódź (nie zużywa zapytań AI!)
+    # KROK 1: Oficjalny kanał PSP Łódź (przez kaskadę proxy omijającą blokadę USA)
     process_psp_lodz_feed(existing_ids, recent_incidents, today_str, now_pl, headers, geo_cache)
 
     # KROK 2: Skanowanie mediów z Polski i z tras przelotowych
