@@ -42,7 +42,7 @@
       desc:r.description,sourceUrl:safeUrl(r.source_url),sources:Array.isArray(r.sources) ? r.sources : [],
       detectedAt:r.created_at,publishedAt:r.published_at,eventDate:r.event_date,eventTime:r.event_time,
       statusObservedAt:r.status_observed_at,accuracy:r.location_accuracy || 'legacy',localAlert:r.local_alert,
-      alertEligible:r.alert_eligible === true};
+      alertEligible:r.alert_eligible === true,mergedInto:r.merged_into || null};
   }
   function timeLabel(item) {
     if (item.eventDate) return `Zdarzenie: ${item.eventDate}${item.eventTime ? ' • ' + item.eventTime : ' • godzina nieznana'}`;
