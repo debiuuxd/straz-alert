@@ -17,6 +17,7 @@ Mapa zdarzeń z całej Polski. Powiadomienia lokalne mają osobny, wąski zasię
 - `local-alert-area.json` jest wspólną konfiguracją bota i strony. Zachowuje poprzednie małe obszary wokół Strykowa/Głowna oraz nazwy miejscowości, a odrzuca odległe miejscowości o powtarzających się nazwach. Łódź i Zgierz są wykluczane także z ulicą w opisie. To nadal filtr przybliżony, nie granice administracyjne.
 - Kalendarz pobiera cały wybrany dzień. „Wszystkie dni” oferuje kolejne strony starszych wpisów. Brak lokalizacji nie usuwa zdarzenia z listy.
 - Radar RainViewer pozostaje na mapie i odświeża pomiar co 10 minut po włączeniu. IMGW i komunikaty modelu Open-Meteo mają oddzielne oznaczenia. Błąd pobierania nie jest komunikatem o braku zagrożeń.
+- Liczba na grupie oznacza liczbę wpisów. Różne punkty rozdzielają się przy zbliżaniu. Wpisy z tym samym zapisanym punktem (np. środkiem miejscowości) otwierają listę z opisem i dokładnością lokalizacji. Nie są rozrzucane w kółko i nie zmieniają współrzędnych. Lista jest też dostępna dla bardzo bliskich punktów przy maksymalnym zbliżeniu. Sam wspólny punkt nie powoduje łączenia wpisów w bazie.
 - Ustawienia mapy zawierają podgląd stanu źródeł i kolejki. Awaria źródła nie wyłącza pozostałych źródeł, ale jest zapisana i dodaje ostrzeżenie do podsumowania GitHuba.
 
 ## Baza i dostęp

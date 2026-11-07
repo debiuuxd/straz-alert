@@ -33,6 +33,27 @@ new vm.Script(fs.readFileSync(require('node:path').join(__dirname,'../map-ui.js'
 // Exercise the real camera controls: switching views must preserve alarm and
 // date/category preferences. No network or database is involved in these controls.
 const ui=require('../map-ui.js');
+// A coincident group is a list, never fabricated marker positions. A spatial
+// group zooms in, and a still-overlapping group at maximum zoom also uses a list.
+const pin=(lat,lng)=>({getLatLng:()=>({lat,lng})});
+let clusterOptions,clusterClick,zoom=7,selectedGroups=[],camera=[];
+const groupMap={getZoom:()=>zoom,getMaxZoom:()=>19,getBoundsZoom:()=>14,
+  fitBounds:(bounds,options)=>{camera.push(options);zoom=options.maxZoom;},setView:(_point,next)=>{zoom=next;}};
+const fakeLeaflet={markerClusterGroup:options=>{clusterOptions=options;return {on:(_events,fn)=>{clusterClick=fn;}};},
+  point:value=>({add:other=>[value[0]+other[0],value[1]+other[1]]})};
+ui.markerGroup(fakeLeaflet,{map:groupMap,onSelectGroup:(markers,context)=>selectedGroups.push({markers,context})});
+const bounds={getCenter:()=>({lat:51.9,lng:19.6})};
+const shared=[pin(51.9,19.6),pin(51.9,19.6)];
+clusterClick({type:'clusterclick',layer:{getAllChildMarkers:()=>shared,getBounds:()=>bounds}});
+assert.equal(selectedGroups.length,1);assert.equal(selectedGroups[0].context.samePoint,true);assert.equal(camera.length,0);
+const separate=[pin(51.9,19.6),pin(51.905,19.6)];
+clusterClick({type:'clusterclick',layer:{getAllChildMarkers:()=>separate,getBounds:()=>bounds}});
+assert.equal(zoom,14);assert.equal(selectedGroups.length,1);
+zoom=19;
+clusterClick({type:'clusterclick',layer:{getAllChildMarkers:()=>separate,getBounds:()=>bounds}});
+assert.equal(selectedGroups.at(-1).context.samePoint,false);
+assert.equal(clusterOptions.spiderfyOnMaxZoom,false);
+assert.equal(ui.samePosition([pin(51.9,19.6),pin(51.9,19.6001)]),false);
 class Control {
   constructor(id){this.id=id;this.attributes={};this.listeners={};this.classes=new Set();
     this.classList={contains:x=>this.classes.has(x),toggle:(x,on)=>on ? this.classes.add(x) : this.classes.delete(x)};}

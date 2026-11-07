@@ -55,7 +55,7 @@
     .filter-pill.active { background-color: #ef4444; color: #ffffff; border-color: #f87171; box-shadow: 0 4px 12px rgba(239, 68, 68, 0.35); }
   </style>
   <link rel="stylesheet" href="./vendor/markercluster/MarkerCluster.css">
-  <link rel="stylesheet" href="./map-ui.css?v=20261107-owner1">
+  <link rel="stylesheet" href="./map-ui.css?v=20261107-cluster2">
 </head>
 <body class="relative select-none">
 
@@ -607,7 +607,7 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="./vendor/markercluster/leaflet.markercluster.js"></script>
   <script src="./app-core.js?v=20261107-owner1"></script>
-  <script src="./map-ui.js?v=20261107-inbox1"></script>
+  <script src="./map-ui.js?v=20261107-cluster2"></script>
   <script src="./incident-inbox.js?v=20261107-inbox1"></script>
   <script src="./owner-tools.js?v=20261107-owner1"></script>
   <script>
@@ -1031,7 +1031,11 @@
     function initMap() {
       map = L.map('map', { zoomControl: false, zoomSnap:.25, zoomDelta:.5 }).setView([51.90, 19.55], 7);
       applyMapStyle(mapStyleIndex);
-      markersLayer = StrazMapUI.markerGroup(L).addTo(map);
+      markersLayer = StrazMapUI.markerGroup(L,{map,
+        padding:()=>({paddingTopLeft:[24,document.getElementById('map-toolbar').getBoundingClientRect().bottom+16],
+          paddingBottomRight:[24,document.getElementById('map-navigation').getBoundingClientRect().height+20]}),
+        onSelectGroup:(markers,context)=>StrazMapUI.showClusterList(markers.map(marker=>findIncident(marker.incidentId)).filter(Boolean),window.openDetails,context)
+      }).addTo(map);
       mapViewControls = StrazMapUI.initControls(map);
 
       setTimeout(() => map.invalidateSize(), 250);
@@ -1214,6 +1218,7 @@
         const marker = L.marker([item.lat,item.lng],{icon:customIcon,
           title:`${item.title} — ${item.location}`,alt:`${item.title} — ${item.location}`});
         marker.incidentSignature = signature;
+        marker.incidentId = item.id;
         marker.on('click', () => window.openDetails(item.id));
         incidentMarkers.set(item.id,marker);
         marker.addTo(markersLayer);
