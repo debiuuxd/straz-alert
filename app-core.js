@@ -48,6 +48,14 @@
     if (item.eventDate) return `Zdarzenie: ${item.eventDate}${item.eventTime ? ' • ' + item.eventTime : ' • godzina nieznana'}`;
     return `Znaleziono: ${dateTime(item.detectedAt)}`;
   }
+  function detailTimes(item) {
+    const day = /^(\d{4})-(\d{2})-(\d{2})$/.exec(item.eventDate || '');
+    const hour = /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(item.eventTime || '') ? item.eventTime : null;
+    const rows = [{label:'Czas zdarzenia',value:day ? `${day[3]}.${day[2]}.${day[1]} · ${hour || 'godzina nieustalona'}` : 'Data i godzina nieustalone'}];
+    if (item.publishedAt) rows.push({label:'Publikacja źródła',value:dateTime(item.publishedAt)});
+    if (item.detectedAt) rows.push({label:'Znaleziono',value:dateTime(item.detectedAt)});
+    return rows;
+  }
   function statusLabel(item, now = Date.now()) {
     if (item.accuracy === 'legacy') return 'Status dawnego wpisu: ' + item.status;
     if (!item.statusObservedAt || item.status === 'Nieustalony') return 'Aktualny status nieznany';
@@ -73,7 +81,7 @@
     const end = parse(w.obowiazuje_do);
     return !end || end.getTime() >= now;
   }
-  const api = {normalize,escapeHtml,safeUrl,point,warsawDay,dateTime,localIncident,mapRow,timeLabel,statusLabel,locationLabel,weatherActive};
+  const api = {normalize,escapeHtml,safeUrl,point,warsawDay,dateTime,localIncident,mapRow,timeLabel,detailTimes,statusLabel,locationLabel,weatherActive};
   root.StrazCore = api;
   if (typeof module !== 'undefined') module.exports = api;
 })(typeof globalThis === 'undefined' ? window : globalThis);

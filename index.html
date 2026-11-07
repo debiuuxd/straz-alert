@@ -28,11 +28,11 @@
     
     #map { position: absolute; top: 0; left: 0; right: 0; bottom: 0; width: 100%; height: 100%; z-index: 10; background: #090a0f; }
     
-    .map-dark-filter img.leaflet-tile:not(.radar-tiles) {
-      -webkit-filter: invert(100%) hue-rotate(180deg) brightness(95%) contrast(90%);
-      filter: invert(100%) hue-rotate(180deg) brightness(95%) contrast(90%);
+    .map-dark-filter .base-map-tiles img.leaflet-tile {
+      -webkit-filter: invert(100%) grayscale(100%) brightness(115%) contrast(90%);
+      filter: invert(100%) grayscale(100%) brightness(115%) contrast(90%);
     }
-    .map-oled-filter img.leaflet-tile:not(.radar-tiles) {
+    .map-oled-filter .base-map-tiles img.leaflet-tile {
       -webkit-filter: invert(100%) grayscale(100%) brightness(75%) contrast(155%);
       filter: invert(100%) grayscale(100%) brightness(75%) contrast(155%);
     }
@@ -54,6 +54,8 @@
     
     .filter-pill.active { background-color: #ef4444; color: #ffffff; border-color: #f87171; box-shadow: 0 4px 12px rgba(239, 68, 68, 0.35); }
   </style>
+  <link rel="stylesheet" href="./vendor/markercluster/MarkerCluster.css">
+  <link rel="stylesheet" href="./map-ui.css">
 </head>
 <body class="relative select-none">
 
@@ -85,7 +87,7 @@
   </div>
 
   <!-- GÓRNY PANEL -->
-  <div style="z-index: 40;" class="fixed top-0 left-0 right-0 pointer-events-none flex flex-col bg-slate-950/95 pt-[env(safe-area-inset-top)]">
+  <div id="map-toolbar" style="z-index: 40;" class="fixed top-0 left-0 right-0 pointer-events-none flex flex-col bg-slate-950/95 pt-[env(safe-area-inset-top)]">
     
     <header class="min-h-[56px] py-1.5 backdrop-blur-md border-b border-slate-800/80 px-2.5 sm:px-4 flex items-center justify-between gap-2 pointer-events-auto shadow-lg">
       <div class="flex items-center gap-2 min-w-0 flex-1">
@@ -109,32 +111,39 @@
           <i data-lucide="cloud-lightning" class="w-4 h-4"></i>
           <span id="header-temp" class="text-[10px]">--°C</span>
         </button>
+        <button id="btn-mobile-tools" class="mobile-menu-toggle" aria-label="Więcej opcji mapy" aria-expanded="false" aria-controls="header-tools"><i data-lucide="ellipsis" class="w-5 h-5"></i></button>
+        <div id="header-tools" class="header-tools">
         <button id="btn-test-sound" title="Przetestuj dźwięk alarmu DSP" class="hidden sm:flex h-9 px-2.5 rounded-xl bg-slate-900 border border-slate-700/80 text-amber-400 text-[11px] font-mono font-bold items-center gap-1 active:scale-95 transition-all">
           <i data-lucide="bell-ring" class="w-3.5 h-3.5"></i>
           <span>TEST DSP</span>
         </button>
         <button id="btn-sound-toggle" title="Włącz/Wyłącz dźwięk" class="h-8 w-8 sm:h-9 sm:w-9 rounded-xl bg-slate-900 border border-slate-700/80 text-emerald-400 flex items-center justify-center active:scale-95 transition-all">
           <i data-lucide="volume-2" class="w-4 h-4" id="sound-icon"></i>
+          <span class="tool-label">Włącz / wyłącz dźwięk</span>
         </button>
         <button id="btn-settings" title="Ustawienia powiadomień i test DSP" class="h-8 w-8 sm:h-9 sm:w-9 rounded-xl bg-slate-900 border border-slate-700/80 text-slate-300 flex items-center justify-center active:scale-95 transition-all">
           <i data-lucide="sliders-horizontal" class="w-4 h-4"></i>
+          <span class="tool-label">Ustawienia i powiadomienia</span>
         </button>
         <button id="btn-refresh" title="Odśwież bazę" class="h-8 w-8 sm:h-9 sm:w-9 rounded-xl bg-slate-900 border border-slate-700/80 text-slate-300 flex items-center justify-center active:scale-95 transition-all">
           <i data-lucide="refresh-cw" class="w-4 h-4" id="refresh-icon"></i>
+          <span class="tool-label">Odśwież dane</span>
         </button>
         <button id="btn-toggle-incidents" class="h-8 sm:h-9 px-2 sm:px-2.5 rounded-xl bg-slate-900 border border-slate-700/80 text-slate-100 text-xs font-medium flex items-center gap-1 active:scale-95 transition-all">
           <i data-lucide="list" class="w-4 h-4 text-red-400"></i>
+          <span class="tool-label">Lista zdarzeń</span>
           <span id="header-counter" class="bg-red-500/20 text-red-400 font-mono text-[11px] px-1.5 py-0.5 rounded-full font-bold">0</span>
         </button>
+        </div>
       </div>
     </header>
 
-    <div class="px-3 pt-2 pb-2 bg-gradient-to-b from-slate-950/90 via-slate-950/60 to-transparent pointer-events-auto">
+    <div class="toolbar-content px-3 pt-2 pb-2 bg-gradient-to-b from-slate-950/90 via-slate-950/60 to-transparent pointer-events-auto">
       <div class="max-w-xl mx-auto space-y-2">
         <div class="flex gap-1.5">
           <div class="relative flex-1">
             <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2"></i>
-            <input id="search-input" type="text" placeholder="Szukaj miejscowości, drogi, jednostki..." 
+            <input id="search-input" type="search" aria-label="Szukaj zdarzeń" placeholder="Szukaj miejscowości lub drogi…" 
               class="w-full h-10 pl-9 pr-8 rounded-xl bg-slate-900/95 border border-slate-700/90 text-xs text-white placeholder-slate-400 focus:outline-none focus:border-red-500 shadow-lg" />
             <button id="clear-search" style="display:none;" class="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white">
               <i data-lucide="x" class="w-3.5 h-3.5"></i>
@@ -151,7 +160,14 @@
           </button>
         </div>
 
-        <div class="flex items-center gap-1.5 overflow-x-auto custom-scrollbar pb-1">
+        <div class="toolbar-shortcuts">
+          <div class="map-view-switch" role="group" aria-label="Szybki wybór widoku mapy">
+            <button id="view-poland" type="button" aria-pressed="false" title="Pokaż całą Polskę"><i data-lucide="globe" class="w-3.5 h-3.5"></i>Polska</button>
+            <button id="view-local" type="button" aria-pressed="false" title="Pokaż Stryków, Głowno i okolicę; bez zmiany powiadomień"><i data-lucide="map-pin" class="w-3.5 h-3.5"></i>Moja okolica</button>
+          </div>
+          <button id="btn-toggle-filters" type="button" aria-expanded="false" aria-controls="category-filters"><i data-lucide="list-filter" class="w-4 h-4"></i><span id="filter-toggle-label">Filtry</span></button>
+        </div>
+        <div id="category-filters" class="category-filters flex items-center gap-1.5 overflow-x-auto custom-scrollbar pb-1">
           <button data-cat="all" class="filter-pill active px-3 py-1.5 rounded-xl bg-slate-900/90 border border-slate-700/80 text-slate-200 text-xs font-tech font-bold whitespace-nowrap transition-all flex items-center gap-1.5 shadow">
             <span>Wszystkie</span>
             <span id="count-all" class="text-[10px] font-mono opacity-80">(0)</span>
@@ -171,18 +187,18 @@
         </div>
 
         <!-- PASEK OSTRZEŻEŃ IMGW -->
-        <div id="imgw-alert-banner" style="display: none;" class="w-full rounded-xl p-2.5 border backdrop-blur-md shadow-lg cursor-pointer transition-all active:scale-[0.99]">
+        <button type="button" id="imgw-alert-banner" style="display: none;" aria-label="Pokaż obszar i szczegóły ostrzeżenia IMGW" class="w-full rounded-xl p-2.5 border backdrop-blur-md shadow-lg cursor-pointer transition-all active:scale-[0.99]">
           <div class="flex items-center justify-between gap-2">
             <div class="flex items-center gap-2 min-w-0">
               <span id="imgw-banner-badge" class="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold uppercase flex-shrink-0">IMGW</span>
               <span id="imgw-banner-text" class="text-xs font-tech font-bold text-white truncate"></span>
             </div>
             <div class="flex items-center gap-1 text-[10px] font-mono text-slate-200 flex-shrink-0">
-              <span>Szczegóły</span>
+              <span>Obszar</span>
               <i data-lucide="chevron-right" class="w-3.5 h-3.5"></i>
             </div>
           </div>
-        </div>
+        </button>
 
       </div>
     </div>
@@ -203,7 +219,7 @@
   <div id="map"></div>
 
   <!-- BOCZNE PRZYCISKI -->
-  <div style="z-index: 35;" class="fixed right-3 bottom-20 flex flex-col gap-2.5 pointer-events-auto">
+  <div id="map-side-controls" style="z-index: 35;" class="fixed right-3 bottom-20 flex flex-col gap-2.5 pointer-events-auto">
     <button id="btn-weather-radar" title="Włącz/Wyłącz żywy radar opadów i burz na mapie" class="w-11 h-11 rounded-2xl bg-slate-900/95 border border-slate-700 text-slate-100 shadow-xl flex items-center justify-center active:scale-95 transition-all">
       <i data-lucide="cloud-rain" class="w-5 h-5 text-sky-400"></i>
     </button>
@@ -222,18 +238,18 @@
   </div>
 
   <!-- DOLNY PASEK NAWIGACJI -->
-  <nav style="z-index: 40;" class="fixed bottom-0 left-0 right-0 h-16 bg-slate-950/95 backdrop-blur-lg border-t border-slate-800/80 px-2 pb-[env(safe-area-inset-bottom)] flex items-center justify-around pointer-events-auto">
+  <nav id="map-navigation" aria-label="Nawigacja aplikacji" style="z-index: 40;" class="fixed bottom-0 left-0 right-0 h-16 bg-slate-950/95 backdrop-blur-lg border-t border-slate-800/80 px-2 pb-[env(safe-area-inset-bottom)] flex items-center justify-around pointer-events-auto">
     <button id="nav-btn-map" class="flex flex-col items-center justify-center flex-1 py-1 text-red-500">
       <i data-lucide="map" class="w-5 h-5"></i>
-      <span class="text-[10px] font-bold font-tech mt-1">Mapa Polski</span>
+      <span class="text-[10px] font-bold font-tech mt-1">Mapa</span>
     </button>
     <button id="nav-btn-incidents" class="flex flex-col items-center justify-center flex-1 py-1 text-slate-400 hover:text-slate-200">
       <i data-lucide="flame" class="w-5 h-5"></i>
-      <span class="text-[10px] font-bold font-tech mt-1">Lista Meldunków</span>
+      <span class="text-[10px] font-bold font-tech mt-1">Zdarzenia</span>
     </button>
     <button id="nav-btn-weather" class="flex flex-col items-center justify-center flex-1 py-1 text-slate-400 hover:text-slate-200">
       <i data-lucide="cloud-lightning" class="w-5 h-5"></i>
-      <span class="text-[10px] font-bold font-tech mt-1">Alerty IMGW</span>
+      <span class="text-[10px] font-bold font-tech mt-1">Pogoda</span>
     </button>
     <button id="nav-btn-calendar" class="flex flex-col items-center justify-center flex-1 py-1 text-slate-400 hover:text-slate-200">
       <i data-lucide="calendar-days" class="w-5 h-5"></i>
@@ -241,7 +257,7 @@
     </button>
     <button id="nav-btn-sis" class="flex flex-col items-center justify-center flex-1 py-1 text-slate-400 hover:text-slate-200">
       <i data-lucide="shield-alert" class="w-5 h-5"></i>
-      <span class="text-[10px] font-bold font-tech mt-1">Słownik SiŚ</span>
+      <span class="text-[10px] font-bold font-tech mt-1">Służby</span>
     </button>
   </nav>
 
@@ -477,41 +493,36 @@
   </div>
 
   <!-- MODAL: KARTA SZCZEGÓŁÓW -->
-  <div id="details-modal" style="display: none; z-index: 99999;" class="fixed inset-0 bg-black/80 backdrop-blur-sm items-end sm:items-center justify-center p-0 sm:p-4">
-    <div class="bg-slate-900 border border-slate-700/80 w-full max-w-lg rounded-t-3xl sm:rounded-2xl p-5 shadow-2xl max-h-[85vh] overflow-y-auto custom-scrollbar">
-      <div class="flex items-center justify-between border-b border-slate-800 pb-3 mb-4">
-        <span id="detail-badge" class="px-2.5 py-1 rounded-full text-xs font-mono font-bold"></span>
-        <button onclick="closeModal('details-modal')" class="text-slate-400 hover:text-white p-1">
-          <i data-lucide="x" class="w-5 h-5"></i>
-        </button>
+  <div id="details-modal" role="dialog" aria-modal="true" aria-labelledby="detail-title" style="display:none; z-index:99999;" class="incident-sheet-backdrop fixed inset-0">
+    <section class="incident-sheet">
+      <header class="incident-sheet-header">
+        <div class="detail-status-row">
+          <span id="detail-badge" class="detail-status"></span>
+          <button id="btn-close-details" onclick="closeModal('details-modal')" class="sheet-close" aria-label="Zamknij szczegóły zdarzenia"><i data-lucide="x" class="w-5 h-5"></i></button>
+        </div>
+        <h3 id="detail-title" class="font-tech"></h3>
+      </header>
+      <div class="incident-sheet-content custom-scrollbar">
+        <div class="detail-place">
+          <i data-lucide="map-pin" class="w-5 h-5"></i>
+          <div><p id="detail-location"></p><p id="detail-region"></p><p id="detail-accuracy"></p></div>
+        </div>
+        <dl id="detail-time" class="detail-times"></dl>
+        <p id="detail-desc" class="detail-description"></p>
+        <section class="detail-units-section">
+          <h4>Służby</h4>
+          <p id="detail-units"></p>
+        </section>
+        <section id="detail-sources-section" class="detail-sources-section" hidden>
+          <h4>Materiały źródłowe <span id="detail-source-count"></span></h4>
+          <div id="detail-source-wrap"></div>
+        </section>
       </div>
-      <h3 id="detail-title" class="font-tech text-xl font-bold text-white mb-2"></h3>
-      <div class="flex flex-wrap items-center gap-2 text-xs text-slate-400 font-mono mb-4">
-        <span id="detail-time"></span>
-        <span>•</span>
-        <span id="detail-location" class="text-slate-200 font-semibold"></span>
-        <span>•</span>
-        <span id="detail-region" class="text-amber-400"></span>
-      </div>
-      <div class="bg-slate-950/70 rounded-xl p-3.5 border border-slate-800/80 mb-4">
-        <div class="text-[11px] font-mono text-slate-400 uppercase tracking-wider mb-1 font-bold">Zadysponowane Siły i Środki (SiŚ):</div>
-        <p id="detail-units" class="text-sm font-semibold text-amber-400 font-tech"></p>
-      </div>
-      <div class="text-sm text-slate-200 leading-relaxed mb-4" id="detail-desc"></div>
-      <div id="detail-source-wrap" class="mb-4" style="display:none;">
-        <a id="detail-source-link" href="#" target="_blank" class="inline-flex items-center gap-1.5 text-xs font-mono text-sky-400 hover:underline">
-          <i data-lucide="external-link" class="w-3.5 h-3.5"></i> Zobacz artykuł źródłowy
-        </a>
-      </div>
-      <div class="flex gap-2">
-        <button id="btn-delete-incident" class="px-4 py-3 rounded-xl bg-red-950/80 hover:bg-red-900 border border-red-500/50 text-red-300 font-tech font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 transition-colors">
-          <i data-lucide="trash-2" class="w-4 h-4"></i> Usuń z mapy
-        </button>
-        <button onclick="closeModal('details-modal')" class="flex-1 py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-tech font-bold text-sm tracking-wider uppercase transition-colors">
-          Zamknij kartę
-        </button>
-      </div>
-    </div>
+      <footer class="incident-sheet-footer">
+        <button id="btn-delete-incident" hidden class="detail-delete"><i data-lucide="trash-2" class="w-4 h-4"></i> Usuń z mapy</button>
+        <button onclick="closeModal('details-modal')" class="detail-done">Wróć do mapy</button>
+      </footer>
+    </section>
   </div>
 
   <!-- MODAL: SŁOWNIK SiŚ -->
@@ -582,7 +593,9 @@
   </div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="./app-core.js"></script>
+  <script src="./vendor/markercluster/leaflet.markercluster.js"></script>
+  <script src="./app-core.js?v=20261107-ui1"></script>
+  <script src="./map-ui.js"></script>
   <script>
     const SUPABASE_URL = 'https://cmjlebtqwyyplwdcklzn.supabase.co';
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNtamxlYnRxd3l5cGx3ZGNrbHpuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIxNTk5OTksImV4cCI6MjEwNzczNTk5OX0.YczVUJnRBcjMBdaKzgQij7MENxN6vDWfe8Btt2sP5-c';
@@ -626,6 +639,8 @@
 
 
     let map, markersLayer, currentTileLayer, radarTileLayer = null;
+    const incidentMarkers = new Map();
+    let detailsReturnFocus = null, detailsMapView = null, mapViewControls = null;
     let radarEnabled = false;
     let mapStyleIndex = parseInt(localStorage.getItem('straz_map_style') || '1', 10);
     let alertPrefMode = localStorage.getItem('straz_alert_pref') || 'local';
@@ -657,8 +672,8 @@
         filterClass: ''
       },
       {
-        name: '🌙 Ciemna Drogowa (Tryb Nocny HD)',
-        desc: 'Ciemny motyw nie rażący w oczy + widoczne wszystkie wsie i drogi',
+        name: '🌙 Czytelna nocna',
+        desc: 'Spokojny podkład w szarościach, z wyraźnymi nazwami i kolorowymi pinezkami',
         url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
         attr: '&copy; OpenStreetMap Polska (Tryb Nocny)',
         filterClass: 'map-dark-filter'
@@ -891,7 +906,8 @@
       banner.className=`w-full rounded-xl p-2.5 border bg-${color}-950/90 border-${color}-500 backdrop-blur-md shadow-lg cursor-pointer`;
       badge.className='px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-slate-800 text-white';
       badge.innerText=unavailable ? 'BRAK DANYCH IMGW' : `${top?.source || 'IMGW'} ${top?.level || ''}°`;
-      text.innerText=unavailable ? 'Nie udało się sprawdzić ostrzeżeń IMGW' : top ? `${top.title} (${top.region})` : '';
+      text.innerText=unavailable ? 'Ostrzeżenia niedostępne' : top ? top.title : '';
+      banner.setAttribute('aria-label',unavailable ? 'Nie udało się sprawdzić ostrzeżeń IMGW. Pokaż szczegóły.' : `${top?.title || 'IMGW'}, stopień ${top?.level || ''}. Pokaż obszar i szczegóły.`);
       const info=unavailable ? '<p class="p-3 text-amber-300">Dane IMGW są niedostępne. Nie można potwierdzić braku ostrzeżeń.</p>' : '<p class="p-2 text-xs text-slate-400">Odczyt IMGW: '+esc(StrazCore.dateTime(new Date().toISOString()))+'</p>';
       list.innerHTML=info+(top ? activeWeatherWarnings.map(w=>`<div class="p-3.5 rounded-2xl bg-slate-950 border border-slate-700 space-y-2"><strong class="text-amber-300">${esc(w.source)} • stopień ${Number(w.level)}</strong><h4>${esc(w.title)}</h4><p class="text-xs text-slate-300">Obszar: ${esc(w.region)}</p><p class="text-xs">${esc(w.desc)}</p><p class="text-xs text-slate-400">Obowiązuje: ${esc(w.from)} → ${esc(w.to)}</p></div>`).join('') : unavailable ? '' : '<p class="p-3 text-emerald-300">W poprawnie pobranych danych nie znaleziono ostrzeżeń dla wybranego zakresu.</p>');
     }
@@ -959,6 +975,7 @@
       }
       currentTileLayer = L.tileLayer(style.url, {
         attribution: style.attr,
+        className: 'base-map-tiles',
         maxZoom: 19
       }).addTo(map);
 
@@ -994,9 +1011,10 @@
     };
 
     function initMap() {
-      map = L.map('map', { zoomControl: false }).setView([51.90, 19.55], 7);
+      map = L.map('map', { zoomControl: false, zoomSnap:.25, zoomDelta:.5 }).setView([51.90, 19.55], 7);
       applyMapStyle(mapStyleIndex);
-      markersLayer = L.layerGroup().addTo(map);
+      markersLayer = StrazMapUI.markerGroup(L).addTo(map);
+      mapViewControls = StrazMapUI.initControls(map);
 
       setTimeout(() => map.invalidateSize(), 250);
       window.addEventListener('resize', () => map.invalidateSize());
@@ -1100,51 +1118,31 @@
       const filtered = getFilteredIncidents();
       document.getElementById('header-counter').innerText = filtered.length;
 
-      markersLayer.clearLayers();
+      const visibleIds = new Set(filtered.filter(item => StrazCore.point(item.lat,item.lng)).map(item => item.id));
+      for (const [id, marker] of incidentMarkers) {
+        if (!visibleIds.has(id)) { markersLayer.removeLayer(marker); incidentMarkers.delete(id); }
+      }
       filtered.forEach(item => {
         if (!StrazCore.point(item.lat,item.lng)) return;
-        const color = item.category === 'fire' ? '#ef4444' : (item.category === 'accident' ? '#f59e0b' : '#0284c7');
-        const emoji = item.category === 'fire' ? '🔥' : (item.category === 'accident' ? '🚗' : '⚠️');
-        
-        const iconHtml = `
-          <div class="relative flex items-center justify-center w-9 h-9">
-            <span class="pulse-ring w-9 h-9" style="background-color: ${color};"></span>
-            <div class="w-8 h-8 rounded-full flex items-center justify-center shadow-xl border-2 border-white" style="background-color: ${color};">
-              <span class="text-sm">${emoji}</span>
-            </div>
-          </div>
-        `;
-
-        const customIcon = L.divIcon({
-          className: 'custom-pin',
-          html: iconHtml,
-          iconSize: [36, 36],
-          iconAnchor: [18, 18]
-        });
-
-        const marker = L.marker([item.lat, item.lng], { icon: customIcon });
-        const popupContent = `
-          <div class="p-2 min-w-[230px]">
-            <div class="flex items-center justify-between gap-2 mb-1">
-              <span class="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-slate-800 text-slate-200">${esc(StrazCore.timeLabel(item))}</span>
-              <span class="text-[10px] font-mono text-red-400 font-bold uppercase">${esc(StrazCore.statusLabel(item))}</span>
-            </div>
-            <h4 class="font-tech text-sm font-bold text-white leading-snug mb-1">${esc(item.title)}</h4>
-            <p class="text-xs text-amber-300 font-semibold mb-1.5">📍 ${esc(item.location)}</p><p class="text-[10px] text-slate-400 mb-2">${esc(StrazCore.locationLabel(item))}</p>
-            <p class="text-[11px] text-slate-300 line-clamp-2 mb-2.5">${esc(item.desc)}</p>
-            <div class="flex gap-1.5">
-              <button onclick="window.openDetails(${item.id})" class="flex-1 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white font-tech text-xs font-bold tracking-wider uppercase transition-colors">
-                Pełny meldunek
-              </button>
-              <button ${canEdit ? "" : "hidden"} onclick="window.deleteIncident(${item.id}, event)" title="Usuń to zgłoszenie" class="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-red-900 text-red-400 font-mono text-xs font-bold transition-colors">
-                🗑️
-              </button>
-            </div>
-          </div>
-        `;
-        marker.bindPopup(popupContent, { className: 'straz-popup', closeButton: true });
+        const signature = [item.lat,item.lng,item.category,item.title,item.location].join('|');
+        const existing = incidentMarkers.get(item.id);
+        if (existing?.incidentSignature === signature) return;
+        if (existing) markersLayer.removeLayer(existing);
+        const category = ['fire','accident'].includes(item.category) ? item.category : 'hazard';
+        const emoji = category === 'fire' ? '🔥' : category === 'accident' ? '🚗' : '⚠️';
+        const customIcon = L.divIcon({className:'custom-pin',
+          html:`<div class="event-pin event-pin--${category}"><span>${emoji}</span></div>`,
+          iconSize:[44,44],iconAnchor:[22,22]});
+        const marker = L.marker([item.lat,item.lng],{icon:customIcon,
+          title:`${item.title} — ${item.location}`,alt:`${item.title} — ${item.location}`});
+        marker.incidentSignature = signature;
+        marker.on('click', () => window.openDetails(item.id));
+        incidentMarkers.set(item.id,marker);
         marker.addTo(markersLayer);
       });
+      const categoryNames = {all:'Filtry',fire:'Pożary',accident:'Wypadki',hazard:'Zagrożenia'};
+      document.getElementById('filter-toggle-label').innerText = categoryNames[activeCategory] || 'Filtry';
+      document.getElementById('btn-toggle-filters').classList.toggle('has-filter',activeCategory!=='all');
 
       document.getElementById('load-older').hidden = !hasMoreArchive;
       const listEl = document.getElementById('incidents-list');
@@ -1176,9 +1174,10 @@
       const item = incidents.find(x => x.id == id);
       if (!item) return;
       document.getElementById('detail-title').innerText = item.title;
-      document.getElementById('detail-time').innerText = StrazCore.timeLabel(item)+' • Informację znaleziono: '+StrazCore.dateTime(item.detectedAt);
+      document.getElementById('detail-time').innerHTML = StrazCore.detailTimes(item).map(row=>`<div><dt>${esc(row.label)}</dt><dd>${esc(row.value)}</dd></div>`).join('');
       document.getElementById('detail-location').innerText = item.location;
-      document.getElementById('detail-region').innerText = (item.region || 'Polska')+' • '+StrazCore.locationLabel(item);
+      document.getElementById('detail-region').innerText = item.region || 'Polska';
+      document.getElementById('detail-accuracy').innerText = StrazCore.locationLabel(item);
       document.getElementById('detail-units').innerText = item.units;
       document.getElementById('detail-desc').innerText = item.desc;
       
@@ -1189,34 +1188,39 @@
       for(const source of sources) {
         const url=StrazCore.safeUrl(source.url); if(!url) continue;
         const link=document.createElement('a'); link.href=url; link.target='_blank'; link.rel='noopener noreferrer';
-        link.className='block text-xs text-sky-400 hover:underline mb-2'; link.innerText=source.title || 'Zobacz źródło'; srcWrap.append(link);
+        link.className='source-card'; link.innerText=source.title || 'Zobacz źródło';
+        const domain=document.createElement('small'); domain.innerText=new URL(url).hostname.replace(/^www\./,'')+' · Otwórz materiał ↗'; link.append(domain); srcWrap.append(link);
       }
-      srcWrap.style.display=srcWrap.children.length ? 'block' : 'none';
+      document.getElementById('detail-sources-section').hidden = !srcWrap.children.length;
+      document.getElementById('detail-source-count').innerText = srcWrap.children.length;
 
 
       document.getElementById('btn-delete-incident').onclick = (e) => window.deleteIncident(item.id, e);
 
       const badge = document.getElementById('detail-badge');
       badge.innerText = StrazCore.statusLabel(item);
-      badge.className = `px-2.5 py-1 rounded-full text-xs font-mono font-bold ${item.category === 'fire' ? 'status-badge-fire' : (item.category === 'accident' ? 'status-badge-accident' : 'status-badge-hazard')}`;
+      badge.className = 'detail-status';
       document.getElementById('btn-delete-incident').hidden = !canEdit;
+      detailsReturnFocus = document.activeElement;
+      document.querySelector('.incident-sheet-content').scrollTop = 0;
       document.getElementById('details-modal').style.display = 'flex';
+      document.body.classList.add('details-open');
+      if (window.matchMedia('(max-width:639px)').matches && StrazCore.point(item.lat,item.lng)) {
+        detailsMapView={center:map.getCenter(),zoom:map.getZoom(),preset:mapViewControls.activeView()};
+        const sheetHeight=document.querySelector('.incident-sheet').getBoundingClientRect().height;
+        map.panInside([item.lat,item.lng],{paddingTopLeft:[24,24],paddingBottomRight:[24,sheetHeight+24],animate:false});
+      }
       lucide.createIcons();
+      document.getElementById('btn-close-details').focus({preventScroll:true});
     };
 
     window.zoomToIncident = function(id) {
       const item = incidents.find(x => x.id == id);
       if (!item) return;
-      if (!StrazCore.point(item.lat,item.lng)) { window.openDetails(id); return; }
       document.getElementById('incidents-panel').style.display = 'none';
-      map.flyTo([item.lat, item.lng], 13, { duration: 1.1 });
-      setTimeout(() => {
-        markersLayer.eachLayer(m => {
-          if (Math.abs(m.getLatLng().lat - item.lat) < 0.0001 && Math.abs(m.getLatLng().lng - item.lng) < 0.0001) {
-            m.openPopup();
-          }
-        });
-      }, 1200);
+      if (!StrazCore.point(item.lat,item.lng)) { window.openDetails(id); return; }
+      map.setView([item.lat,item.lng],13,{animate:false});
+      window.openDetails(id);
     };
 
     function showToast(item) {
@@ -1245,6 +1249,12 @@
 
     function closeModal(id) {
       document.getElementById(id).style.display = 'none';
+      if (id==='details-modal') document.body.classList.remove('details-open');
+      if (id==='details-modal' && detailsMapView) {
+        map.setView(detailsMapView.center,detailsMapView.zoom,{animate:false});
+        mapViewControls.restoreViewState(detailsMapView.preset); detailsMapView=null;
+      }
+      if (id==='details-modal' && detailsReturnFocus?.isConnected) detailsReturnFocus.focus({preventScroll:true});
     }
 
     function ensureClient() {
@@ -1323,6 +1333,16 @@
     window.addEventListener('DOMContentLoaded', () => {
       lucide.createIcons();
       initMap();
+      const detailModal = document.getElementById('details-modal');
+      detailModal.addEventListener('click',event=>{if(event.target===detailModal)closeModal('details-modal');});
+      detailModal.addEventListener('keydown',event=>{
+        if(event.key==='Escape'){event.preventDefault();closeModal('details-modal');return;}
+        if(event.key!=='Tab')return;
+        const controls=[...detailModal.querySelectorAll('button,a[href]')].filter(el=>el.getClientRects().length);
+        const first=controls[0],last=controls.at(-1);
+        if(event.shiftKey && document.activeElement===first){event.preventDefault();last.focus();}
+        else if(!event.shiftKey && document.activeElement===last){event.preventDefault();first.focus();}
+      });
       updateDateUI();
       renderSettingsModal();
       ensureClient();
@@ -1520,10 +1540,6 @@
           map.flyTo([latitude, longitude], 13);
           L.circleMarker([latitude, longitude], { radius: 8, color: '#10b981', fillColor: '#10b981', fillOpacity: 0.9 }).addTo(map).bindPopup('Twoja pozycja').openPopup();
         }, () => alert('Włącz dostęp do lokalizacji.'));
-      });
-
-      document.getElementById('btn-reset-poland').addEventListener('click', () => {
-        map.flyTo([51.90, 19.55], 7);
       });
 
       document.getElementById('btn-sound-toggle').addEventListener('click', () => {
