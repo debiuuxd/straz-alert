@@ -63,6 +63,32 @@ button:focus-visible, a:focus-visible, input:focus-visible {
 .detail-done { flex: 1; min-height: 44px; border: 1px solid #475569; border-radius: 12px; background: #1e293b; color: #f8fafc; font-size: 13px; font-weight: 600; }
 .detail-delete { display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; padding: 0 10px; color: #fca5a5; font-size: 12px; border-radius: 12px; }
 
+/* Wide screens use two rows instead of the narrow, stacked phone layout.
+   Shared controls stay in their original DOM locations with their listeners. */
+@media (min-width: 1024px) {
+  #map-toolbar {
+    display: grid;
+    grid-template-columns: 210px minmax(0, 1fr) 100px 240px;
+    grid-template-rows: auto auto;
+    align-items: center;
+    column-gap: 12px;
+    row-gap: 8px;
+    padding: calc(8px + env(safe-area-inset-top)) 16px 8px;
+    border-bottom: 1px solid #273449;
+  }
+  #map-toolbar > header, #map-toolbar > .toolbar-content,
+  #map-toolbar .toolbar-layout { display: contents; }
+  #map-toolbar .toolbar-layout > * { margin: 0; }
+  #map-brand { grid-column: 1; grid-row: 1; }
+  #map-search-controls { grid-column: 2; grid-row: 1; min-width: 0; }
+  #map-search-controls > div { min-width: 0; }
+  #map-header-actions { grid-column: 3 / 5; grid-row: 1; justify-content: flex-end; }
+  #map-toolbar .toolbar-shortcuts { grid-column: 1; grid-row: 2; }
+  #map-toolbar .map-view-switch button { padding-left: 10px; padding-right: 10px; }
+  #map-toolbar #category-filters { grid-column: 2 / 4; grid-row: 2; min-width: 0; padding-bottom: 0; gap: 4px; }
+  #map-toolbar .filter-pill { padding-left: 9px; padding-right: 9px; }
+  #map-toolbar #imgw-alert-banner { grid-column: 4; grid-row: 2; min-width: 0; }
+}
 @media (min-width: 640px) {
   .incident-sheet-backdrop { align-items: center; padding: 24px; }
   .incident-sheet { border-bottom: 1px solid #334155; border-radius: 22px; max-height: 85vh; }
