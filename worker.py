@@ -56,7 +56,7 @@ IGNORE_TITLE_WORDS = [
     "ławie oskarżonych", "przed sądem", "ruszył proces", "proces w sprawie",
     "wznowiono proces", "opinia biegłych", "biegli o wypadku", "prawomocny wyrok",
     "zapadł wyrok", "skazany za wypadek", "zjednoczonych emiratach", "dubaju",
-    "satelity", "ororatech"
+    "satelity", "ororatech", "karta rodziny"
 ]
 
 TITLE_ACTION_WORDS = [
@@ -95,23 +95,20 @@ def log(msg):
     print(msg, flush=True)
 
 def get_available_models():
-    """Pobiera listę aktualnie działających modeli Gemini z klucza API, żeby uniknąć błędów 404."""
+    """Ustawia najszybsze, działające modele tekstowe Gemini 3.1 na pierwszym miejscu."""
     found = []
     try:
         for m in ai_client.models.list():
             name = m.name.replace("models/", "")
             if "gemini" in name and ("flash" in name or "pro" in name):
-                if not any(x in name for x in ["vision", "embedding", "imagen", "veo", "audio", "tts"]):
+                if not any(x in name for x in ["image", "vision", "embedding", "imagen", "veo", "audio", "tts", "2.0", "2.5"]):
                     found.append(name)
     except Exception as e:
         log(f"⚠️ Nie udało się pobrać listy modeli ({e}), używam domyślnych.")
     
-    # Sortujemy tak, aby lekkie modele flash były pierwsze
-    preferred = [m for m in found if "flash" in m]
-    if preferred:
-        log(f"🤖 Wykryte aktywne modele AI: {', '.join(preferred[:5])}")
-        return preferred[:5]
-    return ["gemini-2.5-flash", "gemini-1.5-flash", "gemini-1.5-pro"]
+    preferred = ["gemini-3.1-flash-lite"] + [m for m in found if m != "gemini-3.1-flash-lite"]
+    log(f"🤖 Aktywne modele AI w kolejce: {', '.join(preferred[:4])}")
+    return preferred[:4]
 
 def is_local_incident(title, location, region, lat, lng):
     loc_clean = location.lower().strip()
@@ -202,7 +199,7 @@ def fetch_psp_lodz_entries():
     }
 
     endpoints = [
-        ("Cloudflare Worker Proxy", PSP_LODZ_PROXY, 12),
+        ("Cloudflare Worker Proxy", PSP_LODZ_PROXY, 10),
         ("Bezpośrednio", PSP_LODZ_ORIGINAL, 5),
     ]
 
