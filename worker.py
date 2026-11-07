@@ -13,7 +13,7 @@ from google import genai
 from google.genai import types
 from supabase import create_client
 
-socket.setdefaulttimeout(10)
+socket.setdefaulttimeout(12)
 
 SUPABASE_URL = os.environ.get("SUPABASE_URL") or "https://cmjlebtqwyyplwdcklzn.supabase.co"
 SUPABASE_KEY = (
@@ -28,14 +28,11 @@ NTFY_TOPIC_ALL = "straz-alert-polska-998"
 NTFY_TOPIC_LOCAL = "straz-alert-lodzkie-998"
 APP_URL = "https://debiuuxd.github.io/straz-alert/"
 
-# Twój mostek Cloudflare Workers + oryginalny link PSP Łódź
 PSP_LODZ_PROXY = "https://psp-lodz-proxy.dawid-debicki98.workers.dev/"
 PSP_LODZ_ORIGINAL = "https://interwencje.straz.lodz.pl/feed"
 
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 ai_client = genai.Client(api_key=GEMINI_API_KEY)
-
-FAST_MODELS = ["gemini-flash-lite-latest", "gemini-2.5-flash-lite", "gemini-2.5-flash", "gemini-2.0-flash"]
 
 RSS_FEEDS = [
     "https://news.google.com/rss/search?q=site:interwencje.straz.lodz.pl+OR+site:straz.lodz.pl&hl=pl&gl=PL&ceid=PL:pl",
@@ -58,7 +55,8 @@ IGNORE_TITLE_WORDS = [
     "sebastian m", "sebastiana m", "ekstradycj", "akt oskarżenia", "aktem oskarżenia",
     "ławie oskarżonych", "przed sądem", "ruszył proces", "proces w sprawie",
     "wznowiono proces", "opinia biegłych", "biegli o wypadku", "prawomocny wyrok",
-    "zapadł wyrok", "skazany za wypadek", "zjednoczonych emiratach", "dubaju"
+    "zapadł wyrok", "skazany za wypadek", "zjednoczonych emiratach", "dubaju",
+    "satelity", "ororatech"
 ]
 
 TITLE_ACTION_WORDS = [
@@ -95,6 +93,25 @@ STRICT_LOCAL_TOWNS = {
 
 def log(msg):
     print(msg, flush=True)
+
+def get_available_models():
+    """Pobiera listę aktualnie działających modeli Gemini z klucza API, żeby uniknąć błędów 404."""
+    found = []
+    try:
+        for m in ai_client.models.list():
+            name = m.name.replace("models/", "")
+            if "gemini" in name and ("flash" in name or "pro" in name):
+                if not any(x in name for x in ["vision", "embedding", "imagen", "veo", "audio", "tts"]):
+                    found.append(name)
+    except Exception as e:
+        log(f"⚠️ Nie udało się pobrać listy modeli ({e}), używam domyślnych.")
+    
+    # Sortujemy tak, aby lekkie modele flash były pierwsze
+    preferred = [m for m in found if "flash" in m]
+    if preferred:
+        log(f"🤖 Wykryte aktywne modele AI: {', '.join(preferred[:5])}")
+        return preferred[:5]
+    return ["gemini-2.5-flash", "gemini-1.5-flash", "gemini-1.5-pro"]
 
 def is_local_incident(title, location, region, lat, lng):
     loc_clean = location.lower().strip()
@@ -185,7 +202,7 @@ def fetch_psp_lodz_entries():
     }
 
     endpoints = [
-        ("Cloudflare Worker Proxy", PSP_LODZ_PROXY, 10),
+        ("Cloudflare Worker Proxy", PSP_LODZ_PROXY, 12),
         ("Bezpośrednio", PSP_LODZ_ORIGINAL, 5),
     ]
 
@@ -200,7 +217,7 @@ def fetch_psp_lodz_entries():
                 return list(parsed.entries)
             else:
                 preview = raw_bytes.decode('utf-8', errors='ignore')[:120].replace('\n', ' ')
-                log(f"   ↪ ({label}) zwrócił pustą listę wpisów. Początek odpowiedzi: {preview}")
+                log(f"   ↪ ({label}) zwrócił pustą listę wpisów. Odpowiedź: {preview}")
         except Exception as e:
             log(f"   ↪ Próba ({label}) nieudana: {str(e)[:60]}...")
             continue
@@ -355,6 +372,8 @@ def run_worker():
     now_pl = datetime.now()
     today_str = now_pl.strftime("%Y-%m-%d")
 
+    active_models = get_available_models()
+
     existing_res = supabase.table('incidents').select('id, external_id, title, description, location, category, lat, lng, date_str').order('id', desc=True).limit(400).execute()
     all_rows = existing_res.data or []
     existing_ids = set(r['external_id'] for r in all_rows if r.get('external_id'))
@@ -444,7 +463,7 @@ def run_worker():
             """
 
             response = None
-            for model_name in FAST_MODELS:
+            for model_name in active_models:
                 try:
                     response = ai_client.models.generate_content(
                         model=model_name,
@@ -458,7 +477,7 @@ def run_worker():
                     log(f"   ✓ Odpowiedział model: {model_name}")
                     break
                 except Exception as err:
-                    log(f"   ⚠️ Model {model_name} niedostępny ({str(err)[:35]}), próbuję kolejny...")
+                    log(f"   ⚠️ Model {model_name} niedostępny ({str(err)[:45]}), próbuję kolejny...")
                     continue
 
             if not response:
