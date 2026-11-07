@@ -55,7 +55,7 @@
     .filter-pill.active { background-color: #ef4444; color: #ffffff; border-color: #f87171; box-shadow: 0 4px 12px rgba(239, 68, 68, 0.35); }
   </style>
   <link rel="stylesheet" href="./vendor/markercluster/MarkerCluster.css">
-  <link rel="stylesheet" href="./map-ui.css?v=20261107-menu1">
+  <link rel="stylesheet" href="./map-ui.css?v=20261107-desktop1">
 </head>
 <body class="relative select-none">
 
@@ -90,7 +90,7 @@
   <div id="map-toolbar" style="z-index: 40;" class="fixed top-0 left-0 right-0 pointer-events-none flex flex-col bg-slate-950/95 pt-[env(safe-area-inset-top)]">
     
     <header class="min-h-[56px] py-1.5 backdrop-blur-md border-b border-slate-800/80 px-2.5 sm:px-4 flex items-center justify-between gap-2 pointer-events-auto shadow-lg">
-      <div class="flex items-center gap-2 min-w-0 flex-1">
+      <div id="map-brand" class="flex items-center gap-2 min-w-0 flex-1">
         <div class="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-gradient-to-br from-red-600 to-amber-600 flex items-center justify-center shadow-md shadow-red-600/30 border border-red-400/40 flex-shrink-0">
           <i data-lucide="flame" class="w-4 h-4 sm:w-5 sm:h-5 text-white"></i>
         </div>
@@ -106,7 +106,7 @@
         </div>
       </div>
 
-      <div class="flex items-center gap-1 flex-shrink-0">
+      <div id="map-header-actions" class="flex items-center gap-1 flex-shrink-0">
         <button id="btn-weather-modal" title="Status Pogodowy IMGW / Warunki w okolicy" class="h-8 sm:h-9 px-2 rounded-xl bg-slate-900 border border-slate-700/80 text-sky-400 text-[11px] font-mono font-bold flex items-center gap-1 active:scale-95 transition-all">
           <i data-lucide="cloud-lightning" class="w-4 h-4"></i>
           <span id="header-temp" class="text-[10px]">--°C</span>
@@ -139,8 +139,8 @@
     </header>
 
     <div class="toolbar-content px-3 pt-2 pb-2 bg-gradient-to-b from-slate-950/90 via-slate-950/60 to-transparent pointer-events-auto">
-      <div class="max-w-xl mx-auto space-y-2">
-        <div class="flex gap-1.5">
+      <div class="toolbar-layout max-w-xl mx-auto space-y-2">
+        <div id="map-search-controls" class="flex gap-1.5">
           <div class="relative flex-1">
             <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2"></i>
             <input id="search-input" type="search" aria-label="Szukaj zdarzeń" placeholder="Szukaj miejscowości lub drogi…" 
