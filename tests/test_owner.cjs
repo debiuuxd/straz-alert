@@ -1,0 +1,15 @@
+const assert=require('node:assert/strict');
+const owner=require('../owner-tools.js');
+const area=require('../local-alert-area.json');
+const a={id:7,edit_revision:3,title:'Pożar',location:'Stryków',source_url:'https://example.org/a',sources:[{url:'javascript:alert(1)'},{url:'https://example.org/a',title:'Źródło'}]};
+assert.equal(owner.sourceLinks(a).length,1);
+assert.equal(owner.sourceLinks(a)[0].title,'Źródło');
+const args=owner.moveArgs(a,51.901,19.602,' Stryków ',area);
+assert.equal(args.p_revision,3);assert.equal(args.p_location,'Stryków');assert.equal(args.p_local_alert,true);
+assert.equal(owner.moveArgs(a,51.76,19.45,'Łódź',area).p_local_alert,false);
+assert.throws(()=>owner.moveArgs(a,null,null,'Stryków',area));
+assert.throws(()=>owner.moveArgs(a,51.9,19.6,' ',area));
+const b={...a,id:8,edit_revision:9};
+assert.deepEqual(owner.mergeArgs([a,b],8),{p_keep_id:8,p_duplicate_id:7,p_keep_revision:9,p_duplicate_revision:3});
+assert.throws(()=>owner.mergeArgs([a,a],7));
+console.log('Owner payload, source safety and local geographic rules passed');

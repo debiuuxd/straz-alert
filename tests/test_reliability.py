@@ -150,7 +150,7 @@ class ReliabilityTests(unittest.TestCase):
             def execute(self):
                 from types import SimpleNamespace
                 if self.op=='update':
-                    self.db.updates.append((self.table,self.value)); return SimpleNamespace(data=[])
+                    self.db.updates.append((self.table,self.value)); return SimpleNamespace(data=[{**old,**self.value}])
                 if self.table=='feed_queue':
                     return SimpleNamespace(data=[{'external_id':new['external_id'], 'attempts':0,
                         'payload':{'psp':False, 'quiet':False}}])
@@ -166,6 +166,42 @@ class ReliabilityTests(unittest.TestCase):
         self.assertEqual(db.updates[0][0],'incidents')
         self.assertEqual(len(db.updates[0][1]['sources']),2)
         self.assertEqual(db.updates[1][1]['incident_id'],488)
+
+    def test_enrichment_follows_owner_merge_and_retries_changed_revision(self):
+        old, incoming = self.krakow_reports()
+        reads = [{**old, 'merged_into':900}, {**old,'id':900,'edit_revision':2},
+                 {**old,'id':900,'edit_revision':3,'sources':[{'url':'https://example.org/owner'}]}]
+        filters=[]
+        class Query:
+            def __init__(self): self.write=False; self.conditions=[]
+            def select(self,*args): return self
+            def update(self,patch): self.write=True; self.patch=patch; return self
+            def eq(self,key,value): self.conditions.append((key,value)); return self
+            def is_(self,*args): return self
+            def execute(self):
+                from types import SimpleNamespace
+                if not self.write: return SimpleNamespace(data=[reads.pop(0)])
+                filters.append(self.conditions)
+                if len(filters)==1: return SimpleNamespace(data=[])
+                return SimpleNamespace(data=[{**old,'id':900,**self.patch}])
+        class DB:
+            def table(self,name): return Query()
+        with patch.object(worker,'supabase',DB()):
+            result=worker.enrich_existing(old['id'],incoming)
+        self.assertEqual(result['id'],900)
+        self.assertIn(('edit_revision',2),filters[0])
+        self.assertIn(('edit_revision',3),filters[1])
+        self.assertIn('https://example.org/owner',{s['url'] for s in result['sources']})
+
+    def test_enrichment_does_not_turn_a_deleted_record_into_a_new_pin(self):
+        from types import SimpleNamespace
+        from unittest.mock import MagicMock
+        db=MagicMock()
+        db.table.return_value.select.return_value.eq.return_value.execute.return_value=SimpleNamespace(data=[])
+        with patch.object(worker,'supabase',db):
+            with self.assertRaisesRegex(ValueError,'usunięty'):
+                worker.enrich_existing(1,{})
+        db.table.return_value.insert.assert_not_called()
 
     def test_completed_incident_not_reopened_by_new_article(self):
         old = self.incident(status='Zakończone', status_observed_at='2026-11-07T10:00:00Z')

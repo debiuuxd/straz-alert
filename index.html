@@ -55,7 +55,7 @@
     .filter-pill.active { background-color: #ef4444; color: #ffffff; border-color: #f87171; box-shadow: 0 4px 12px rgba(239, 68, 68, 0.35); }
   </style>
   <link rel="stylesheet" href="./vendor/markercluster/MarkerCluster.css">
-  <link rel="stylesheet" href="./map-ui.css?v=20261107-inbox1">
+  <link rel="stylesheet" href="./map-ui.css?v=20261107-owner1">
 </head>
 <body class="relative select-none">
 
@@ -528,6 +528,7 @@
           <h4>Materiały źródłowe <span id="detail-source-count"></span></h4>
           <div id="detail-source-wrap"></div>
         </section>
+        <section id="owner-actions" hidden></section>
       </div>
       <footer class="incident-sheet-footer">
         <button id="btn-delete-incident" hidden class="detail-delete"><i data-lucide="trash-2" class="w-4 h-4"></i> Usuń z mapy</button>
@@ -605,9 +606,10 @@
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="./vendor/markercluster/leaflet.markercluster.js"></script>
-  <script src="./app-core.js?v=20261107-ui1"></script>
+  <script src="./app-core.js?v=20261107-owner1"></script>
   <script src="./map-ui.js?v=20261107-inbox1"></script>
   <script src="./incident-inbox.js?v=20261107-inbox1"></script>
+  <script src="./owner-tools.js?v=20261107-owner1"></script>
   <script>
     const SUPABASE_URL = 'https://cmjlebtqwyyplwdcklzn.supabase.co';
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNtamxlYnRxd3l5cGx3ZGNrbHpuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIxNTk5OTksImV4cCI6MjEwNzczNTk5OX0.YczVUJnRBcjMBdaKzgQij7MENxN6vDWfe8Btt2sP5-c';
@@ -644,7 +646,7 @@
 
     function getTodayStr() { return StrazCore.warsawDay(); }
     const esc = StrazCore.escapeHtml;
-    let localArea = null, canEdit = false, currentSession = null;
+    let localArea = null, canEdit = false, currentSession = null, ownerTools = null;
     let fetchSequence = 0, allLoadedCount = 300, hasMoreArchive = false;
     let calendarCounts = {}, weatherSourceState = {imgw: false, meteo: false};
     let selectedPoint = null;
@@ -737,10 +739,11 @@
         const {data, error} = await supabaseClient.from('app_editors').select('email');
         canEdit = !error && data?.some(row => row.email === currentSession.user.email.toLowerCase());
       }
-      document.getElementById('editor-login-state').innerText = canEdit ? 'Zalogowano — możesz dodawać i usuwać zdarzenia.' : 'Mapa jest dostępna do oglądania. Edycja tylko dla właściciela.';
+      document.getElementById('editor-login-state').innerText = canEdit ? 'Zalogowano — możesz dodawać i usuwać zdarzenia, przesuwać pinezki oraz łączyć duplikaty.' : 'Mapa jest dostępna do oglądania. Edycja tylko dla właściciela.';
       document.getElementById('editor-logout').hidden = !currentSession;
       document.getElementById('editor-login-form').hidden = Boolean(currentSession);
       document.getElementById('btn-delete-incident').hidden = !canEdit;
+      ownerTools?.accessChanged();
       if (map) renderAll();
     }
 
@@ -1259,6 +1262,7 @@
     window.showNewAllDays=function(){selectedDate='';updateDateUI();renderAll();loadIncidentsFromSupabase(false);};
 
     window.openDetails = function(id) {
+      if(ownerTools?.isPicking())return;
       const item = findIncident(id);
       if (!item) return;
       document.getElementById('detail-title').innerText = item.title;
@@ -1289,6 +1293,7 @@
       badge.innerText = StrazCore.statusLabel(item);
       badge.className = 'detail-status';
       document.getElementById('btn-delete-incident').hidden = !canEdit;
+      ownerTools?.syncCard(item.id);
       detailsReturnFocus = document.activeElement;
       document.querySelector('.incident-sheet-content').scrollTop = 0;
       document.getElementById('details-modal').style.display = 'flex';
@@ -1453,6 +1458,17 @@
       updateDateUI();
       renderSettingsModal();
       ensureClient();
+      ownerTools=StrazOwner.init({map,client:ensureClient,canEdit:()=>canEdit,area:()=>localArea,
+        closeDetails:()=>closeModal('details-modal'),closeList:()=>setIncidentsPanel(false),
+        saved:async id=>{
+          const {data,error}=await supabaseClient.from('incidents').select('*').eq('id',id).single();
+          if(error)throw error;
+          selectedDate=data.date_str;activeCategory='all';searchQuery='';document.getElementById('search-input').value='';
+          listNewOnly=false;
+          await Promise.all([loadIncidentsFromSupabase(false),refreshInbox()]);
+          if(!findIncident(id)){incidents.push(StrazCore.mapRow(data));renderAll();}
+          window.zoomToIncident(id);
+        }});
       loadLocalArea();
       supabaseClient.auth.getSession().then(({data})=>{currentSession=data.session;refreshEditorAccess();});
       supabaseClient.auth.onAuthStateChange((_event,session)=>{currentSession=session;setTimeout(refreshEditorAccess,0);});

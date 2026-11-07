@@ -3,6 +3,7 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const core = require('../app-core.js');
 const area = require('../local-alert-area.json');
+require('./test_owner.cjs');
 for(const example of require('./local-cases.json')) {
   assert.equal(core.localIncident(example,area),example.expected,example.location);
 }
