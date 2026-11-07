@@ -28,7 +28,9 @@ NTFY_TOPIC_ALL = "straz-alert-polska-998"
 NTFY_TOPIC_LOCAL = "straz-alert-lodzkie-998"
 APP_URL = "https://debiuuxd.github.io/straz-alert/"
 
-PSP_LODZ_FEED = "https://interwencje.straz.lodz.pl/feed"
+# Twój mostek Cloudflare Workers + oryginalny link PSP Łódź
+PSP_LODZ_PROXY = "https://psp-lodz-proxy.dawid-debicki98.workers.dev/"
+PSP_LODZ_ORIGINAL = "https://interwencje.straz.lodz.pl/feed"
 
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 ai_client = genai.Client(api_key=GEMINI_API_KEY)
@@ -36,9 +38,7 @@ ai_client = genai.Client(api_key=GEMINI_API_KEY)
 FAST_MODELS = ["gemini-flash-lite-latest", "gemini-2.5-flash-lite", "gemini-2.5-flash", "gemini-2.0-flash"]
 
 RSS_FEEDS = [
-    # 1. Google News zmuszony do indeksowania samej strony interwencji PSP Łódź:
     "https://news.google.com/rss/search?q=site:interwencje.straz.lodz.pl+OR+site:straz.lodz.pl&hl=pl&gl=PL&ceid=PL:pl",
-    # 2. Lokalne portale i trasy wokół Strykowa i Głowna:
     "https://news.google.com/rss/search?q=(wypadek+OR+po%C5%BCar+OR+kolizja+OR+stra%C5%BC+OR+zderzenie)+(Stryk%C3%B3w+OR+G%C5%82owno+OR+Bratoszewice+OR+Dmosin+OR+Niesu%C5%82k%C3%B3w)+when:1d&hl=pl&gl=PL&ceid=PL:pl",
     "https://news.google.com/rss/search?q=(wypadek+OR+po%C5%BCar+OR+zablokowana+OR+dachowanie+OR+zderzenie)+(A1+OR+A2+OR+DK14+OR+DK92)+(Stryk%C3%B3w+OR+G%C5%82owno+OR+%C5%81owicz+OR+Sosnowiec)+when:1d&hl=pl&gl=PL&ceid=PL:pl",
     "https://remiza.com.pl/feed/",
@@ -179,19 +179,14 @@ def fetch_psp_lodz_entries():
     ctx.verify_mode = ssl.CERT_NONE
 
     pl_headers = {
-        'User-Agent': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
-        'Accept': '*/*',
-        'Accept-Language': 'pl-PL,pl;q=0.9',
-        'X-Forwarded-For': '83.8.0.1'
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
+        'Accept': 'application/rss+xml, application/xml, text/xml, */*',
+        'Accept-Language': 'pl-PL,pl;q=0.9'
     }
 
-    encoded_url = urllib.parse.quote(PSP_LODZ_FEED, safe='')
-    
     endpoints = [
-        ("Google Translate Proxy", "https://interwencje-straz-lodz-pl.translate.goog/feed?_x_tr_sl=pl&_x_tr_tl=pl&_x_tr_hl=pl", 6),
-        ("Corsfix Proxy", f"https://proxy.corsfix.com/?{PSP_LODZ_FEED}", 6),
-        ("ThingProxy", f"https://thingproxy.freeboard.io/fetch/{PSP_LODZ_FEED}", 6),
-        ("Jina Reader", f"https://r.jina.ai/{PSP_LODZ_FEED}", 8),
+        ("Cloudflare Worker Proxy", PSP_LODZ_PROXY, 10),
+        ("Bezpośrednio", PSP_LODZ_ORIGINAL, 5),
     ]
 
     for label, url, tout in endpoints:
@@ -203,17 +198,20 @@ def fetch_psp_lodz_entries():
             if parsed.entries and len(parsed.entries) > 0:
                 log(f"   ✓ Pobrano wykaz PSP Łódź przez: {label} ({len(parsed.entries)} wpisów)")
                 return list(parsed.entries)
+            else:
+                preview = raw_bytes.decode('utf-8', errors='ignore')[:120].replace('\n', ' ')
+                log(f"   ↪ ({label}) zwrócił pustą listę wpisów. Początek odpowiedzi: {preview}")
         except Exception as e:
-            log(f"   ↪ Próba ({label}) nieudana: {str(e)[:45]}...")
+            log(f"   ↪ Próba ({label}) nieudana: {str(e)[:60]}...")
             continue
 
     return []
 
 def process_psp_lodz_feed(existing_ids, recent_incidents, today_str, now_pl, headers, geo_cache):
-    log(f"\n🚒 [PSP ŁÓDŹ] Pobieram oficjalny wykaz interwencji: {PSP_LODZ_FEED}...")
+    log(f"\n🚒 [PSP ŁÓDŹ] Pobieram oficjalny wykaz interwencji przez mostek: {PSP_LODZ_PROXY}...")
     entries = fetch_psp_lodz_entries()
     if not entries:
-        log("⚠️ Serwer PSP Łódź odrzucił wszystkie bramki z USA (silny Geo-blocking na Polskę).")
+        log("⚠️ Nie udało się pobrać kanału PSP Łódź w tym cyklu.")
         return
 
     added_psp = 0
@@ -222,7 +220,7 @@ def process_psp_lodz_feed(existing_ids, recent_incidents, today_str, now_pl, hea
         external_id = entry.get('id') or entry.get('guid') or entry.get('link')
         raw_title = (entry.get('title') or '').strip()
         raw_desc = (entry.get('summary') or entry.get('description') or '').strip()
-        link = entry.get('link') or PSP_LODZ_FEED
+        link = entry.get('link') or PSP_LODZ_ORIGINAL
 
         if not external_id or not raw_title or external_id in existing_ids:
             continue
@@ -353,7 +351,7 @@ def is_duplicate_recent(new_title, new_loc, new_cat, new_lat, new_lng, recent_in
     return False
 
 def run_worker():
-    log("🚀 Start skanowania (PSP Łódź bez AI + Polska przez AI + ntfy.sh)...")
+    log("🚀 Start skanowania (PSP Łódź przez Cloudflare + Polska przez AI + ntfy.sh)...")
     now_pl = datetime.now()
     today_str = now_pl.strftime("%Y-%m-%d")
 
@@ -362,7 +360,7 @@ def run_worker():
     existing_ids = set(r['external_id'] for r in all_rows if r.get('external_id'))
     recent_incidents = all_rows[:80]
 
-    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/124.0.0.0'}
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/130.0.0.0'}
     geo_cache = {}
 
     process_psp_lodz_feed(existing_ids, recent_incidents, today_str, now_pl, headers, geo_cache)
