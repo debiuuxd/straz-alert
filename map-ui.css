@@ -6,6 +6,7 @@ button:focus-visible, a:focus-visible, input:focus-visible {
 }
 .header-tools { display: flex; align-items: center; gap: 4px; }
 .tool-label, .mobile-menu-toggle { display: none; }
+#map-toolbar.tools-open { z-index: 60 !important; }
 .new-count-badge { position: absolute; top: 0; left: calc(50% + 7px); min-width: 18px; padding: 1px 5px; border-radius: 9px; background: #0369a1; color: #fff; font: 700 10px var(--font-sans) !important; }
 #incidents-panel { overflow: hidden; padding-bottom: env(safe-area-inset-bottom); background: #0b1222; }
 #incidents-panel > div:first-child { padding: 8px 16px; }

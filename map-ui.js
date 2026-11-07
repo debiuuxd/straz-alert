@@ -28,6 +28,7 @@
     const filterButton = document.getElementById('btn-toggle-filters');
     const setMenu = open => {
       tools.classList.toggle('is-open', open);
+      document.getElementById('map-toolbar').classList.toggle('tools-open',open);
       menuButton.setAttribute('aria-expanded', String(open));
     };
     menuButton.addEventListener('click', () => setMenu(!tools.classList.contains('is-open')));
