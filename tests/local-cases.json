@@ -1,0 +1,13 @@
+[
+  {"title":"Pożar", "location":"Stryków", "region":"łódzkie", "lat":51.901,"lng":19.602,"expected":true},
+  {"title":"Wypadek", "location":"Głowno", "region":"łódzkie", "lat":51.964,"lng":19.712,"expected":true},
+  {"title":"Pożar", "location":"Łódź, ul. Zgierska", "region":"łódzkie", "lat":51.85,"lng":19.53,"expected":false},
+  {"title":"Pożar", "location":"Zgierz, ul. Długa", "region":"łódzkie", "lat":51.86,"lng":19.54,"expected":false},
+  {"title":"Wypadek na A1", "location":"Gdańsk", "region":"pomorskie", "lat":54.35,"lng":18.65,"expected":false},
+  {"title":"Pożar", "location":"Sosnowiec", "region":"śląskie", "lat":50.29,"lng":19.10,"expected":false},
+  {"title":"Pożar", "location":"Szczecin", "region":"zachodniopomorskie", "lat":53.43,"lng":14.55,"expected":false},
+  {"title":"Wypadek na A1", "location":"węzeł Łódź Północ", "region":"łódzkie", "lat":51.894,"lng":19.64,"expected":true},
+  {"title":"Pożar", "location":"Stryków", "region":"łódzkie", "lat":null,"lng":null,"expected":false},
+  {"title":"Pożar", "location":"Kraków", "region":"małopolskie", "lat":50.06,"lng":19.94,"expected":false},
+  {"title":"Pożar", "location":"Stryków", "region":"łódzkie", "lat":0,"lng":0,"expected":false}
+]

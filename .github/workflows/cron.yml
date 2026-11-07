@@ -7,12 +7,15 @@ on:
 
 concurrency:
   group: straz-worker
-  cancel-in-progress: true
+  cancel-in-progress: false
+
+permissions:
+  contents: read
 
 jobs:
   scrape-and-analyze:
     runs-on: ubuntu-latest
-    timeout-minutes: 2
+    timeout-minutes: 7
     steps:
       - name: Pobierz kod
         uses: actions/checkout@v4
@@ -23,7 +26,7 @@ jobs:
           python-version: '3.11'
 
       - name: Zainstaluj biblioteki
-        run: pip install feedparser google-genai supabase
+        run: pip install -r requirements.lock.txt
 
       - name: Uruchomienie skryptu AI
         env:
@@ -33,3 +36,4 @@ jobs:
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: python -u worker.py
+
