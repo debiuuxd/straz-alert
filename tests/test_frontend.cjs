@@ -57,4 +57,4 @@ assert.equal(preferences.get('activeCategory'),'fire');
 assert.deepEqual([...preferences.keys()],['straz_alert_pref','selectedDate','activeCategory','straz_map_view']);
 assert.deepEqual(cameraMoves[0].options.paddingTopLeft,[20,192]);
 delete global.document;delete global.localStorage;
-console.log('Frontend regression checks passed');
+require('./test_inbox.cjs').then(()=>console.log('Frontend regression checks passed')).catch(error=>{console.error(error);process.exitCode=1;});
