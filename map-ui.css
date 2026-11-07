@@ -189,3 +189,21 @@ button.owner-primary { background: #0369a1; border-color: #38bdf8; color: #fff; 
 .owner-description { white-space: pre-wrap; }
 .owner-confirm { margin-top: 16px; }
 @media(max-width:639px) { .owner-merge-grid { grid-template-columns: 1fr; } .owner-dialog { padding: 14px; } #owner-picker { bottom: calc(12px + env(safe-area-inset-bottom)); } }
+
+/* A shared geocoded point opens a list; markers keep their saved positions. */
+.cluster-dialog { width: min(620px,calc(100vw - 24px)); max-height: calc(100dvh - 32px); margin: auto; padding: 18px; overflow: auto; border: 1px solid #475569; border-radius: 18px; color: #f1f5f9; background: #0f172a; }
+.cluster-dialog::backdrop { background: #020617b8; }
+.cluster-dialog header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.cluster-dialog h3 { font-size: 18px; line-height: 1.4; font-weight: 700; }
+.cluster-dialog h3 span { color: #7dd3fc; white-space: nowrap; }
+.cluster-close { width: 44px; height: 44px; flex-shrink: 0; border: 1px solid #475569; border-radius: 12px; background: #1e293b; }
+.cluster-dialog > p { margin: 12px 0 16px; color: #cbd5e1; line-height: 1.6; font-size: 13px; }
+.cluster-event-list { display: grid; gap: 10px; }
+.cluster-event { display: flex; flex-direction: column; gap: 7px; width: 100%; padding: 14px; border: 1px solid #334155; border-radius: 12px; background: #0b1222; text-align: left; overflow-wrap: anywhere; }
+.cluster-event:hover { border-color: #38bdf8; }
+.cluster-event strong { font-size: 14px; line-height: 1.5; }
+.cluster-event > span { font-size: 13px; color: #cbd5e1; }
+.cluster-event .cluster-summary { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; font-size: 12px; line-height: 1.5; color: #cbd5e1; }
+.cluster-event small { font-size: 11px; line-height: 1.5; color: #94a3b8; }
+.cluster-event .cluster-open { color: #7dd3fc; font-weight: 600; margin-top: 3px; }
+@media(max-width:639px) { .cluster-dialog { padding: 14px; } }
