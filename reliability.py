@@ -4,6 +4,7 @@ import json
 import math
 import re
 import unicodedata
+from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode
 from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
 from pathlib import Path
@@ -129,18 +130,119 @@ def event_fields(data, source_text, published_at, now):
             "event_time": event_time}
 
 
+def canonical_url(value):
+    try:
+        url = urlsplit(str(value or ''))
+        if url.scheme not in ('http', 'https') or not url.netloc:
+            return ''
+        query = [(key, val) for key, val in parse_qsl(url.query, keep_blank_values=True)
+                 if not key.lower().startswith('utm_') and key.lower() not in ('fbclid', 'gclid', 'oc')]
+        return urlunsplit(('https', url.netloc.lower().removeprefix('www.'),
+                           url.path.rstrip('/'), urlencode(sorted(query)), ''))
+    except ValueError:
+        return ''
+
+
+def _event_kind(row):
+    # Classify the wording, not the coarse AI category (shootings were classified
+    # both as accident and hazard). Ambiguous wording cannot establish equivalence.
+    text = normalize(row.get('title'))
+    if re.search(r'strzel|strzal|postrzel|ostrzel', text):
+        return 'shooting'
+    if re.search(r'pozar|plon|splon', text):
+        return 'fire'
+    if re.search(r'wypad|zderz|koliz|dachow|potrac', text):
+        return 'traffic'
+    return ''
+
+
+def _title_tokens(text):
+    stop = {'w', 'we', 'na', 'pod', 'i', 'oraz', 'z', 'ze', 'do', 'o', 'po', 'przy', 'sa', 'jest'}
+    result = set()
+    for word in re.findall(r'[a-z0-9]+', normalize(text)):
+        if word in stop:
+            continue
+        if re.match(r'strzel|strzal|postrzel|ostrzel', word):
+            word = 'shooting'
+        elif word in ('rynek', 'rynku'):
+            word = 'rynek'
+        result.add(word[:5] if len(word) > 5 else word)
+    return result
+
+
+def _location_tokens(value):
+    return _title_tokens(re.sub(r'\b(?:ulica|ulicy|ul|aleja|alei|al|plac|pl)\b', ' ', normalize(value)))
+
+
+def _same_report_window(new, old):
+    # Detection/publication dates are only a matching hint, never an invented event date.
+    day1 = str(new.get('event_date') or new.get('date_str') or '')
+    day2 = str(old.get('event_date') or old.get('date_str') or '')
+    if not day1 or day1 != day2:
+        return False
+    if new.get('event_time') and old.get('event_time'):
+        return new['event_time'] == old['event_time']
+    time1 = parse_timestamp(new.get('published_at') or new.get('created_at') or new.get('updated_at'))
+    time2 = parse_timestamp(old.get('published_at') or old.get('created_at'))
+    return bool(time1 and time2 and abs(time1-time2) <= timedelta(hours=2))
+
+
+def _same_specific_location(new, old):
+    points = [coordinates(row.get('lat'), row.get('lng')) for row in (new, old)]
+    if all(points):
+        # Names repeat nationwide. GPS can reject distant namesakes, but cannot
+        # establish a match. Tolerate legacy geocoding several km off in one city.
+        a, b = points
+        distance_km = math.hypot((a[0]-b[0])*111, (a[1]-b[1])*70)
+        if distance_km > 15:
+            return False
+    locations = [normalize(row.get('location')) for row in (new, old)]
+    # A shared city centre coordinate or a shared city name is not enough.
+    marker = r'\b(?:ulica|ulicy|ul|aleja|alei|al|rynek|rynku|plac|pl|rondo|ronda|osiedle|wezel|wezla|skrzyzowanie|skrzyzowaniu)\b|\b(?:a|s|dk|dw)\s?\d+\b'
+    if not all(re.search(marker, location) for location in locations):
+        return False
+    sets = [_location_tokens(location) for location in locations]
+    common = sets[0] & sets[1]
+    if len(common) < 2 or len(common) / max(len(sets[0] | sets[1]), 1) < .8:
+        return False
+    # Different named streets, buildings or road numbers remain distinct.
+    for pattern in (r'\b(?:a|s|dk|dw)\s?\d+\b', r'\b\d+[a-z]?\b'):
+        anchors = [{re.sub(r'\s+', '', anchor) for anchor in re.findall(pattern, location)} for location in locations]
+        if anchors[0] != anchors[1]:
+            return False
+    return True
+
+
 def find_duplicate(new, recent):
-    """Conservative: proximity/two common words are never sufficient to merge."""
-    links = {s.get("url") for s in new.get("sources", []) if s.get("url")}
+    """Use source identity first, then strong place/text/time evidence; never GPS alone."""
+    links = {canonical_url(s.get("url")) for s in new.get("sources", [])}
+    links.add(canonical_url(new.get('source_url')))
+    links.discard('')
     for old in recent:
-        if old.get("external_id") == new.get("external_id"):
+        if old.get('merged_into'):
+            continue
+        if new.get('external_id') and old.get("external_id") == new["external_id"]:
             return old
-        old_links = {s.get("url") for s in old.get("sources", []) if s.get("url")}
-        if old.get("source_url"):
-            old_links.add(old["source_url"])
+        old_links = {canonical_url(s.get("url")) for s in old.get("sources", [])}
+        old_links.add(canonical_url(old.get('source_url')))
+        old_links.discard('')
         if links & old_links:
             return old
-        # Cross-article merges need matching explicit date AND time and strong text.
+    # Identity is checked across ALL candidates before any similarity match.
+    for old in recent:
+        if old.get('merged_into'):
+            continue
+        if str(old.get('external_id', '')).startswith('manual-'):
+            continue
+        # Exact/reworded reports about a specific place can match without an event
+        # hour. The same kind of event is required even if AI category labels differ.
+        kind = _event_kind(new)
+        if kind and kind == _event_kind(old) and _same_report_window(new, old) and _same_specific_location(new, old):
+            words, other = _title_tokens(new.get('title')), _title_tokens(old.get('title'))
+            common = words & other
+            if len(common) >= 3 and len(common) / max(min(len(words), len(other)), 1) >= .75:
+                return old
+        # City-only reports require matching explicit date AND time and strong text.
         if not new.get("event_date") or not new.get("event_time"):
             continue
         if (new["event_date"], new["event_time"], new["category"]) != (
@@ -156,10 +258,14 @@ def find_duplicate(new, recent):
 
 
 def merge_incident(old, new):
-    sources = {s["url"]: s for s in old.get("sources", []) if s.get("url")}
-    if old.get("source_url") and old["source_url"] not in sources:
-        sources[old["source_url"]] = {"url": old["source_url"], "title": old.get("title", "Źródło")}
-    sources.update({s["url"]: s for s in new.get("sources", []) if s.get("url")})
+    sources = {}
+    for row in (old, new):
+        entries = ([{"url": row['source_url'], "title": row.get('title', 'Źródło')}]
+                   if row.get('source_url') else []) + row.get('sources', [])
+        for source in entries:
+            key = canonical_url(source.get('url'))
+            if key:
+                sources[key] = {**sources.get(key, {}), **source}
     patch = {"sources": list(sources.values()), "updated_at": new["updated_at"]}
     for field in ("event_date", "event_time"):
         if not old.get(field) and new.get(field):
@@ -179,7 +285,7 @@ def merge_incident(old, new):
 
 
 def notification_eligible(incident, now, source_ready):
-    if not source_ready or not coordinates(incident.get("lat"), incident.get("lng")):
+    if incident.get('merged_into') or not source_ready or not coordinates(incident.get("lat"), incident.get("lng")):
         return False
     if incident.get("status") == "Zakończone" or "alarm falszywy" in normalize(incident.get("title")):
         return False

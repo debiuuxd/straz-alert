@@ -1261,7 +1261,7 @@
         const limit=date ? Infinity : allLoadedCount;
         while(from<limit) {
           const size=Math.min(1000,limit-from);
-          let query=supabaseClient.from('incidents').select('*').order('id',{ascending:false}).range(from,from+size-1);
+          let query=supabaseClient.from('incidents').select('*').is('merged_into',null).order('id',{ascending:false}).range(from,from+size-1);
           if(date) query=query.eq('date_str',date);
           const {data,error}=await query;
           if(error) throw error;
@@ -1287,7 +1287,7 @@
       const month=`${calViewYear}-${String(calViewMonth+1).padStart(2,'0')}`;
       const counts={}; let from=0;
       while(true) {
-        const {data,error}=await supabaseClient.from('incidents').select('date_str').gte('date_str',month+'-01').lte('date_str',month+'-31').order('id').range(from,from+999);
+        const {data,error}=await supabaseClient.from('incidents').select('date_str').is('merged_into',null).gte('date_str',month+'-01').lte('date_str',month+'-31').order('id').range(from,from+999);
         if(error) return;
         for(const row of data) counts[row.date_str]=(counts[row.date_str]||0)+1;
         if(data.length<1000) break; from+=1000;
@@ -1299,7 +1299,7 @@
       supabaseClient.channel('public:incidents').on('postgres_changes',{event:'*',schema:'public',table:'incidents'},payload=>{
         if(payload.eventType==='INSERT') {
           const item=StrazCore.mapRow(payload.new);
-          if(!incidents.some(x=>x.id===item.id) && (!selectedDate || item.dateStr===selectedDate)) {
+          if(!item.mergedInto && !incidents.some(x=>x.id===item.id) && (!selectedDate || item.dateStr===selectedDate)) {
             incidents.unshift(item); renderAll(); showToast(item);
           }
           highestSeenId=Math.max(highestSeenId || 0,item.id);

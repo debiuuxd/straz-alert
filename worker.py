@@ -275,6 +275,8 @@ def build_incident(item, data):
 
 
 def notify_once(incident, enabled=True):
+    if incident.get('merged_into'):
+        return
     topics = [NTFY_TOPIC_ALL] + ([NTFY_TOPIC_LOCAL] if incident.get('local_alert') else [])
     for topic in topics:
         # Unique reservation BEFORE the HTTP request: ambiguous timeouts are not retried.
@@ -309,7 +311,7 @@ def notify_once(incident, enabled=True):
 def process_queue(models, deadline):
     pending = supabase.table('feed_queue').select('*').eq('state', 'pending').lte(
         'next_attempt', now_utc().isoformat()).order('first_seen').limit(40).execute().data
-    recent = supabase.table('incidents').select('*').order('id', desc=True).limit(500).execute().data
+    recent = supabase.table('incidents').select('*').is_('merged_into', 'null').order('id', desc=True).limit(500).execute().data
     calls = [0]
     completed = 0
     for item in pending:
@@ -318,9 +320,9 @@ def process_queue(models, deadline):
         payload = item['payload']
         attempts = item['attempts'] + 1
         try:
-            already = supabase.table('incidents').select('id').eq('external_id', item['external_id']).execute().data
+            already = supabase.table('incidents').select('id,merged_into').eq('external_id', item['external_id']).execute().data
             if already and not payload.get('refresh'):
-                supabase.table('feed_queue').update({'state': 'done', 'incident_id': already[0]['id']}).eq('external_id', item['external_id']).execute()
+                supabase.table('feed_queue').update({'state': 'done', 'incident_id': already[0].get('merged_into') or already[0]['id']}).eq('external_id', item['external_id']).execute()
                 continue
             published = parse_timestamp(payload.get('published_at'))
             if published and now_utc() - published > timedelta(days=3):
@@ -358,7 +360,7 @@ def process_queue(models, deadline):
 
 
 def process_manual(deadline):
-    rows = supabase.table('incidents').select('*').like('external_id', 'manual-%').eq('location_accuracy', 'unknown').order('id', desc=True).limit(5).execute().data
+    rows = supabase.table('incidents').select('*').is_('merged_into', 'null').like('external_id', 'manual-%').eq('location_accuracy', 'unknown').order('id', desc=True).limit(5).execute().data
     for row in rows:
         if time.monotonic() >= deadline:
             break
@@ -367,7 +369,7 @@ def process_manual(deadline):
             patch = {'lat': point[0], 'lng': point[1], 'location_accuracy': 'town',
                      'local_alert': is_local_incident(row['title'], row['location'], row['region'], *point)}
             supabase.table('incidents').update(patch).eq('id', row['id']).execute()
-    manual = supabase.table('incidents').select('*').like('external_id', 'manual-%').eq('notify_requested', True).gte(
+    manual = supabase.table('incidents').select('*').is_('merged_into', 'null').like('external_id', 'manual-%').eq('notify_requested', True).gte(
         'created_at', (now_utc()-timedelta(hours=2)).isoformat()).execute().data
     for row in manual:
         point = coordinates(row['lat'], row['lng'])
