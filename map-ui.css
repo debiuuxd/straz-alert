@@ -6,6 +6,30 @@ button:focus-visible, a:focus-visible, input:focus-visible {
 }
 .header-tools { display: flex; align-items: center; gap: 4px; }
 .tool-label, .mobile-menu-toggle { display: none; }
+.new-count-badge { position: absolute; top: 0; left: calc(50% + 7px); min-width: 18px; padding: 1px 5px; border-radius: 9px; background: #0369a1; color: #fff; font: 700 10px var(--font-sans) !important; }
+#incidents-panel { overflow: hidden; padding-bottom: env(safe-area-inset-bottom); background: #0b1222; }
+#incidents-panel > div:first-child { padding: 8px 16px; }
+#close-incidents-panel { width: 40px; height: 40px; flex-shrink: 0; }
+.incident-list-controls { padding: 0 16px 10px; flex-shrink: 0; border-bottom: 1px solid #273449; }
+.incident-list-tabs { display: flex; gap: 6px; }
+.incident-list-tabs button { min-height: 36px; padding: 6px 14px; border: 1px solid #334155; border-radius: 10px; color: #cbd5e1; font-size: 12px; font-weight: 600; }
+.incident-list-tabs button[aria-pressed="true"] { border-color: #38bdf8; background: #0c4a6e66; color: #e0f2fe; }
+.viewport-filter { display: flex; align-items: center; gap: 9px; min-height: 38px; margin-top: 5px; color: #e2e8f0; font-size: 12px; cursor: pointer; }
+.viewport-filter input { width: 18px; height: 18px; accent-color: #38bdf8; flex-shrink: 0; }
+#incident-list-summary, #inbox-load-state { margin-top: 4px; font-size: 11px; line-height: 1.5; color: #94a3b8; }
+#inbox-load-state { color: #cbd5e1; }
+#mark-new-reviewed { width: 100%; min-height: 36px; padding: 6px 10px; margin-top: 8px; border: 1px solid #475569; border-radius: 10px; background: #1e293b; color: #e2e8f0; font-size: 11px; }
+#mark-new-reviewed:disabled { opacity: .5; cursor: wait; }
+#incidents-list { min-height: 0; }
+#incidents-list .incident-card-meta { flex-wrap: wrap; gap: 4px; font-size: 11px; }
+#incidents-list .incident-card-meta > div { min-width: 0; max-width: 100%; }
+#incidents-list .incident-card-meta > div > span { overflow-wrap: anywhere; }
+.list-new-tag { display: inline-block; border-radius: 5px; padding: 1px 5px; color: #bae6fd; background: #07598566; font-size: 10px; vertical-align: middle; }
+.show-new-all-days { min-height: 40px; padding: 8px 12px; border: 1px solid #475569; border-radius: 10px; color: #bae6fd; font-size: 12px; }
+#incidents-panel.viewport-list { height: 48vh; height: 48dvh; }
+@media (min-width: 1024px) {
+  #incidents-panel.viewport-list { top: var(--list-map-top,120px); bottom: var(--list-map-bottom,76px); left: auto; right: 12px; width: 400px; max-width: 42vw; height: auto; margin: 0; border: 1px solid #334155; border-radius: 20px; }
+}
 /* The header's backdrop filter creates its own stacking context. Raise that
    whole context so the open menu also covers the search and IMGW controls. */
 #map-toolbar > header { position: relative; z-index: 2; }

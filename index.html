@@ -55,7 +55,7 @@
     .filter-pill.active { background-color: #ef4444; color: #ffffff; border-color: #f87171; box-shadow: 0 4px 12px rgba(239, 68, 68, 0.35); }
   </style>
   <link rel="stylesheet" href="./vendor/markercluster/MarkerCluster.css">
-  <link rel="stylesheet" href="./map-ui.css?v=20261107-desktop1">
+  <link rel="stylesheet" href="./map-ui.css?v=20261107-inbox1">
 </head>
 <body class="relative select-none">
 
@@ -243,8 +243,9 @@
       <i data-lucide="map" class="w-5 h-5"></i>
       <span class="text-[10px] font-bold font-tech mt-1">Mapa</span>
     </button>
-    <button id="nav-btn-incidents" class="flex flex-col items-center justify-center flex-1 py-1 text-slate-400 hover:text-slate-200">
+    <button id="nav-btn-incidents" class="relative flex flex-col items-center justify-center flex-1 py-1 text-slate-400 hover:text-slate-200">
       <i data-lucide="flame" class="w-5 h-5"></i>
+      <span id="nav-new-count" class="new-count-badge" hidden></span>
       <span class="text-[10px] font-bold font-tech mt-1">Zdarzenia</span>
     </button>
     <button id="nav-btn-weather" class="flex flex-col items-center justify-center flex-1 py-1 text-slate-400 hover:text-slate-200">
@@ -477,15 +478,25 @@
   </div>
 
   <!-- SZUFLADA: LISTA MELDUNKÓW -->
-  <div id="incidents-panel" style="display: none; z-index: 50;" class="fixed inset-x-0 bottom-0 max-w-lg mx-auto bg-slate-950/98 border-t border-slate-800 rounded-t-3xl backdrop-blur-xl shadow-2xl flex flex-col h-[75vh]">
+  <div id="incidents-panel" aria-label="Lista zdarzeń" style="display: none; z-index: 50;" class="fixed inset-x-0 bottom-0 max-w-lg mx-auto bg-slate-950/98 border-t border-slate-800 rounded-t-3xl backdrop-blur-xl shadow-2xl flex flex-col h-[75vh]">
     <div class="px-5 py-3.5 border-b border-slate-800/80 flex items-center justify-between">
       <div class="flex items-center gap-2">
         <i data-lucide="radio" class="w-5 h-5 text-red-500 animate-pulse"></i>
-        <h3 class="font-tech text-base font-bold text-white uppercase tracking-wider">Meldunki z wybranego dnia</h3>
+        <h3 class="font-tech text-base font-bold text-white uppercase tracking-wider">Zdarzenia</h3>
       </div>
-      <button id="close-incidents-panel" class="w-8 h-8 rounded-full bg-slate-800 text-slate-300 flex items-center justify-center">
+      <button id="close-incidents-panel" aria-label="Zamknij listę zdarzeń" class="w-8 h-8 rounded-full bg-slate-800 text-slate-300 flex items-center justify-center">
         <i data-lucide="x" class="w-4 h-4"></i>
       </button>
+    </div>
+    <div class="incident-list-controls">
+      <div class="incident-list-tabs" role="group" aria-label="Wybierz listę zdarzeń">
+        <button id="list-all" type="button" aria-pressed="true">Wszystkie</button>
+        <button id="list-new" type="button" aria-pressed="false">Nowe <span id="list-new-count">…</span></button>
+      </div>
+      <label class="viewport-filter"><input id="list-viewport-only" type="checkbox">Tylko z widocznego obszaru</label>
+      <p id="incident-list-summary" role="status"></p>
+      <p id="inbox-load-state" role="status"></p>
+      <button id="mark-new-reviewed" type="button" hidden>Oznacz wszystkie nowe jako przejrzane</button>
     </div>
     <div id="incidents-list" class="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar"></div>
       <p id="data-load-state" role="status" class="px-4 text-xs text-amber-300"></p>
@@ -596,6 +607,7 @@
   <script src="./vendor/markercluster/leaflet.markercluster.js"></script>
   <script src="./app-core.js?v=20261107-ui1"></script>
   <script src="./map-ui.js"></script>
+  <script src="./incident-inbox.js?v=20261107-inbox1"></script>
   <script>
     const SUPABASE_URL = 'https://cmjlebtqwyyplwdcklzn.supabase.co';
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNtamxlYnRxd3l5cGx3ZGNrbHpuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIxNTk5OTksImV4cCI6MjEwNzczNTk5OX0.YczVUJnRBcjMBdaKzgQij7MENxN6vDWfe8Btt2sP5-c';
@@ -645,6 +657,9 @@
     let mapStyleIndex = parseInt(localStorage.getItem('straz_map_style') || '1', 10);
     let alertPrefMode = localStorage.getItem('straz_alert_pref') || 'local';
     let incidents = [];
+    let readTracker=StrazInbox.createReadTracker(localStorage);
+    let inboxRows=[], inboxHead=0, inboxSequence=0, inboxReady=false, inboxLoading=false, inboxError=false;
+    let listNewOnly=false, listViewportOnly=false, inboxRefreshTimer=null;
     let highestSeenId = null;
     let activeCategory = 'all';
     let searchQuery = '';
@@ -954,12 +969,12 @@
     window.deleteIncident = async function(id, event) {
       if (event) event.stopPropagation();
       if (!canEdit) { alert('Usuwanie jest dostępne po zalogowaniu właściciela w ustawieniach.'); return; }
-      const item=incidents.find(x=>x.id===Number(id));
+      const item=findIncident(id);
       if (!item || !confirm(`Usunąć wpis „${item.title}”?`)) return;
       try {
         const {data,error}=await supabaseClient.from('incidents').delete().eq('id',Number(id)).select('id');
         if(error || !data?.length) throw new Error('Nie udało się usunąć wpisu. Sprawdź uprawnienia.');
-        incidents=incidents.filter(x=>x.id!==Number(id)); closeModal('details-modal'); renderAll();
+        incidents=incidents.filter(x=>x.id!==Number(id)); inboxRows=inboxRows.filter(x=>x.id!==Number(id)); closeModal('details-modal'); renderAll(); scheduleInboxRefresh();
       } catch(error) { alert(error.message); }
     };
 
@@ -1090,18 +1105,78 @@
     };
 
     function getFilteredIncidents() {
-      return incidents.filter(item => {
-        const matchDate = !selectedDate || item.dateStr === selectedDate;
-        const matchCat = activeCategory === 'all' || item.category === activeCategory;
-        const q = searchQuery.toLowerCase().trim();
-        const matchSearch = !q || 
-          (item.title && item.title.toLowerCase().includes(q)) ||
-          (item.location && item.location.toLowerCase().includes(q)) ||
-          (item.region && item.region.toLowerCase().includes(q)) ||
-          (item.units && item.units.toLowerCase().includes(q)) ||
-          (item.desc && item.desc.toLowerCase().includes(q));
-        return matchDate && matchCat && matchSearch;
-      });
+      return StrazInbox.filterRows(incidents,{date:selectedDate,category:activeCategory,search:searchQuery});
+    }
+
+    function findIncident(id) { return incidents.find(x=>x.id==id) || inboxRows.find(x=>x.id==id); }
+
+    function syncPanelLayout() {
+      const panel=document.getElementById('incidents-panel');
+      const open=panel.style.display!=='none';
+      panel.classList.toggle('viewport-list',open && listViewportOnly);
+      document.documentElement.style.setProperty('--list-map-top',`${document.getElementById('map-toolbar').getBoundingClientRect().bottom+12}px`);
+      document.documentElement.style.setProperty('--list-map-bottom',`${document.getElementById('map-navigation').getBoundingClientRect().height+12}px`);
+    }
+
+    function visibleMapBounds() {
+      const rect=map.getContainer().getBoundingClientRect();
+      let left=rect.left+8, right=rect.right-8;
+      let top=Math.max(rect.top,document.getElementById('map-toolbar').getBoundingClientRect().bottom)+8;
+      let bottom=Math.min(rect.bottom,document.getElementById('map-navigation').getBoundingClientRect().top)-8;
+      const panel=document.getElementById('incidents-panel');
+      if(panel.style.display!=='none') {
+        const drawer=panel.getBoundingClientRect();
+        if(window.matchMedia('(min-width:1024px)').matches) right=Math.min(right,drawer.left-8);
+        else bottom=Math.min(bottom,drawer.top-8);
+      }
+      if(right<=left || bottom<=top) return {empty:true};
+      const nw=map.containerPointToLatLng([left-rect.left,top-rect.top]);
+      const se=map.containerPointToLatLng([right-rect.left,bottom-rect.top]);
+      return {north:nw.lat,south:se.lat,west:nw.lng,east:se.lng};
+    }
+
+    function setIncidentsPanel(open) {
+      document.getElementById('incidents-panel').style.display=open ? 'flex' : 'none';
+      renderIncidentsList();
+    }
+
+    function renderInboxUI() {
+      const count=inboxRows.length, badge=document.getElementById('nav-new-count');
+      badge.hidden=!count; badge.innerText=count>999 ? '999+' : count;
+      badge.setAttribute('aria-label',`${count} nowych zdarzeń`);
+      document.getElementById('list-new-count').innerText=inboxReady ? `(${count})` : inboxError ? '(?)' : '(…)';
+      document.getElementById('list-all').setAttribute('aria-pressed',String(!listNewOnly));
+      document.getElementById('list-new').setAttribute('aria-pressed',String(listNewOnly));
+      const ack=document.getElementById('mark-new-reviewed');
+      ack.hidden=!listNewOnly || !count;
+      ack.disabled=!inboxReady || inboxLoading || inboxError;
+      ack.innerText=`Oznacz wszystkie nowe (${count}) jako przejrzane`;
+      const state=document.getElementById('inbox-load-state');
+      state.hidden=!listNewOnly && !inboxError;
+      state.innerText=inboxError ? 'Nie udało się odświeżyć nowych wpisów. Spróbuj przyciskiem odświeżania.' :
+        !inboxReady ? 'Sprawdzanie nowych wpisów…' : !readTracker.persistent ? 'Licznik działa do zamknięcia strony — przeglądarka nie zapisała jego stanu.' :
+        count ? 'Nowe = dodane do mapy. Przycisk poniżej oznaczy wszystkie nowe, także ukryte przez filtry.' :
+        'Nowo dodane do mapy. Licznik zerujesz ręcznie na tym urządzeniu.';
+    }
+
+    async function refreshInbox() {
+      ensureClient(); const sequence=++inboxSequence;
+      inboxLoading=true; renderInboxUI();
+      try {
+        const snapshot=await StrazInbox.fetchSnapshot(supabaseClient,readTracker.through);
+        if(sequence!==inboxSequence) return;
+        readTracker.initialize(snapshot.head);
+        inboxRows=[...new Map(snapshot.rows.map(StrazCore.mapRow).filter(row=>readTracker.isNew(row)).map(row=>[row.id,row])).values()].sort((a,b)=>b.id-a.id);
+        inboxHead=snapshot.head; inboxReady=true; inboxError=false;
+      } catch { if(sequence===inboxSequence) inboxError=true; }
+      finally {
+        if(sequence===inboxSequence){inboxLoading=false;renderIncidentsList();}
+      }
+    }
+
+    function scheduleInboxRefresh() {
+      clearTimeout(inboxRefreshTimer);
+      inboxRefreshTimer=setTimeout(refreshInbox,300);
     }
 
     function updateCounters() {
@@ -1144,34 +1219,47 @@
       document.getElementById('filter-toggle-label').innerText = categoryNames[activeCategory] || 'Filtry';
       document.getElementById('btn-toggle-filters').classList.toggle('has-filter',activeCategory!=='all');
 
-      document.getElementById('load-older').hidden = !hasMoreArchive;
+      renderIncidentsList();
+    }
+
+    function renderIncidentsList() {
+      syncPanelLayout(); renderInboxUI();
+      const filtered=StrazInbox.filterRows(listNewOnly ? inboxRows : incidents,{date:selectedDate,category:activeCategory,search:searchQuery,bounds:listViewportOnly ? visibleMapBounds() : null});
+      document.getElementById('incident-list-summary').innerText=`${filtered.length}${listNewOnly ? ' z '+inboxRows.length+' nowych' : ' zdarzeń'} · ${selectedDate===getTodayStr() ? 'Dziś' : selectedDate || 'Wszystkie dni'}${listViewportOnly ? ' · bieżący obszar' : ''}`;
+      document.getElementById('load-older').hidden = !hasMoreArchive || listNewOnly;
+      document.getElementById('data-load-state').hidden = listNewOnly;
       const listEl = document.getElementById('incidents-list');
+      const scrollTop=listEl.scrollTop;
       if (filtered.length === 0) {
         listEl.innerHTML = `
           <div class="text-center py-12 px-4 space-y-2">
-            <div class="text-slate-400 font-mono text-xs">Brak zgłoszeń w dniu <strong class="text-white">${selectedDate || 'Wszystkie'}</strong>.</div>
-            <p class="text-[11px] text-slate-500">Mapa jest czysta i gotowa na nowe dzisiejsze meldunki.</p>
+            <div class="text-slate-200 text-sm">${listNewOnly && inboxReady && !inboxRows.length ? 'Nie masz nowych wpisów do przejrzenia.' : 'Brak zdarzeń pasujących do filtrów.'}</div>
+            <p class="text-xs text-slate-400">${listViewportOnly ? 'Przesuń mapę lub ją oddal. Wpisy bez ustalonego miejsca są pomijane w tym filtrze.' : 'Sprawdź wybraną datę, kategorię i wyszukiwanie.'}</p>
+            ${listNewOnly && inboxRows.length && selectedDate ? '<button type="button" onclick="window.showNewAllDays()" class="show-new-all-days">Pokaż nowe ze wszystkich dni</button>' : ''}
           </div>`;
       } else {
         listEl.innerHTML = filtered.map(item => `
           <div onclick="window.zoomToIncident(${item.id})" class="p-3.5 rounded-2xl bg-slate-900/90 border border-slate-800 hover:border-red-500/60 cursor-pointer transition-all active:scale-[0.98]">
-            <div class="flex items-center justify-between text-xs font-mono mb-1">
+            <div class="incident-card-meta flex items-center justify-between text-xs font-mono mb-1">
               <span class="font-bold text-red-400">${esc(StrazCore.timeLabel(item))}</span>
               <div class="flex items-center gap-2">
                 <span class="text-slate-300 font-semibold">📍 ${esc(item.location)}</span>
                 <button ${canEdit ? "" : "hidden"} onclick="window.deleteIncident(${item.id}, event)" title="Usuń z mapy" class="px-1.5 py-0.5 rounded bg-slate-800 hover:bg-red-900 text-red-400 text-[11px]">🗑️</button>
               </div>
             </div>
-            <h4 class="font-tech text-sm font-bold text-white mb-1">${esc(item.title)}</h4>
+            <h4 class="font-tech text-sm font-bold text-white mb-1">${readTracker.isNew(item) ? '<span class="list-new-tag">Nowe</span> ' : ''}${esc(item.title)}</h4>
             <div class="text-xs text-amber-400 font-mono font-medium truncate mb-1.5">🚒 SiŚ: ${esc(item.units)}</div>
             <p class="text-xs text-slate-400 line-clamp-2">${esc(item.desc)}</p>
           </div>
         `).join('');
       }
+      listEl.scrollTop=scrollTop;
     }
 
+    window.showNewAllDays=function(){selectedDate='';updateDateUI();renderAll();loadIncidentsFromSupabase(false);};
+
     window.openDetails = function(id) {
-      const item = incidents.find(x => x.id == id);
+      const item = findIncident(id);
       if (!item) return;
       document.getElementById('detail-title').innerText = item.title;
       document.getElementById('detail-time').innerHTML = StrazCore.detailTimes(item).map(row=>`<div><dt>${esc(row.label)}</dt><dd>${esc(row.value)}</dd></div>`).join('');
@@ -1215,9 +1303,9 @@
     };
 
     window.zoomToIncident = function(id) {
-      const item = incidents.find(x => x.id == id);
+      const item = findIncident(id);
       if (!item) return;
-      document.getElementById('incidents-panel').style.display = 'none';
+      setIncidentsPanel(false);
       if (!StrazCore.point(item.lat,item.lng)) { window.openDetails(id); return; }
       map.setView([item.lat,item.lng],13,{animate:false});
       window.openDetails(id);
@@ -1307,6 +1395,7 @@
 
     function subscribeRealtime() {
       supabaseClient.channel('public:incidents').on('postgres_changes',{event:'*',schema:'public',table:'incidents'},payload=>{
+        scheduleInboxRefresh();
         if(payload.eventType==='INSERT') {
           const item=StrazCore.mapRow(payload.new);
           if(!item.mergedInto && !incidents.some(x=>x.id===item.id) && (!selectedDate || item.dateStr===selectedDate)) {
@@ -1317,7 +1406,7 @@
       }).subscribe();
     }
 
-    setInterval(()=>loadIncidentsFromSupabase(true),20000);
+    setInterval(()=>{loadIncidentsFromSupabase(true);refreshInbox();},20000);
     setInterval(()=>{
       fetchWeatherAndIMGW();
       if(radarEnabled) refreshRadar().catch(()=>{document.getElementById('radar-time-label').innerText+=' • odświeżenie niedostępne';});
@@ -1327,12 +1416,30 @@
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'visible') {
         loadIncidentsFromSupabase(true);
+        refreshInbox();
       }
     });
 
     window.addEventListener('DOMContentLoaded', () => {
       lucide.createIcons();
       initMap();
+      map.on('moveend resize',()=>{if(listViewportOnly)renderIncidentsList();});
+      window.addEventListener('resize',()=>renderIncidentsList());
+      document.getElementById('list-all').addEventListener('click',()=>{listNewOnly=false;document.getElementById('incidents-list').scrollTop=0;renderIncidentsList();});
+      document.getElementById('list-new').addEventListener('click',()=>{listNewOnly=true;document.getElementById('incidents-list').scrollTop=0;renderIncidentsList();});
+      document.getElementById('list-viewport-only').addEventListener('change',event=>{listViewportOnly=event.target.checked;renderIncidentsList();});
+      document.getElementById('mark-new-reviewed').addEventListener('click',()=>{
+        if(!inboxReady || inboxLoading || inboxError)return;
+        ++inboxSequence; readTracker.markReviewed(inboxHead);
+        inboxRows=inboxRows.filter(row=>readTracker.isNew(row));
+        renderIncidentsList(); refreshInbox();
+      });
+      window.addEventListener('storage',event=>{
+        if(event.key!==StrazInbox.STORAGE_KEY)return;
+        readTracker=StrazInbox.createReadTracker(localStorage);
+        inboxRows=inboxRows.filter(row=>readTracker.isNew(row));
+        renderIncidentsList(); refreshInbox();
+      });
       const detailModal = document.getElementById('details-modal');
       detailModal.addEventListener('click',event=>{if(event.target===detailModal)closeModal('details-modal');});
       detailModal.addEventListener('keydown',event=>{
@@ -1350,6 +1457,7 @@
       supabaseClient.auth.getSession().then(({data})=>{currentSession=data.session;refreshEditorAccess();});
       supabaseClient.auth.onAuthStateChange((_event,session)=>{currentSession=session;setTimeout(refreshEditorAccess,0);});
       loadIncidentsFromSupabase(false).then(() => subscribeRealtime());
+      refreshInbox();
       fetchWeatherAndIMGW();
 
       document.getElementById('editor-login-form').addEventListener('submit',async event=>{
@@ -1552,21 +1660,22 @@
 
       document.getElementById('btn-refresh').addEventListener('click', () => {
         loadIncidentsFromSupabase(true);
+        refreshInbox();
         fetchWeatherAndIMGW();
       });
 
       document.getElementById('btn-toggle-incidents').addEventListener('click', () => {
         const p = document.getElementById('incidents-panel');
-        p.style.display = p.style.display === 'none' ? 'flex' : 'none';
+        setIncidentsPanel(p.style.display==='none');
       });
       document.getElementById('nav-btn-incidents').addEventListener('click', () => {
-        document.getElementById('incidents-panel').style.display = 'flex';
+        setIncidentsPanel(true);
       });
       document.getElementById('nav-btn-map').addEventListener('click', () => {
-        document.getElementById('incidents-panel').style.display = 'none';
+        setIncidentsPanel(false);
       });
       document.getElementById('close-incidents-panel').addEventListener('click', () => {
-        document.getElementById('incidents-panel').style.display = 'none';
+        setIncidentsPanel(false);
       });
       document.getElementById('nav-btn-sis').addEventListener('click', () => {
         document.getElementById('sis-modal').style.display = 'flex';
