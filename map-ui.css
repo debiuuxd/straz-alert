@@ -152,3 +152,40 @@ button:focus-visible, a:focus-visible, input:focus-visible {
 @media (prefers-reduced-motion: reduce) {
   .pulse-ring, .animate-pulse, .animate-ping { animation: none !important; }
 }
+
+/* Owner tools stay inside the incident sheet, leaving the map toolbar compact. */
+#owner-actions { margin-top: 20px; padding: 14px; border: 1px solid #334155; border-radius: 14px; background: #0c1c30; }
+#owner-actions h4 { font-weight: 700; color: #e0f2fe; }
+#owner-actions p, #owner-picker p { font-size: 12px; line-height: 1.5; color: #b8c7d9; margin: 7px 0; }
+.owner-buttons { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.owner-buttons button, .owner-dialog button { min-height: 44px; padding: 9px 12px; border: 1px solid #475569; border-radius: 10px; background: #1e293b; color: #f1f5f9; font-size: 13px; }
+.owner-buttons button:disabled, .owner-dialog button:disabled { opacity: .5; cursor: not-allowed; }
+button.owner-primary { background: #0369a1; border-color: #38bdf8; color: #fff; }
+#owner-picker { position: fixed; z-index: 100001; bottom: calc(76px + env(safe-area-inset-bottom)); left: 12px; right: 12px; max-width: 560px; margin: auto; padding: 14px; border: 1px solid #38bdf8; border-radius: 16px; background: #0b1729; box-shadow: 0 8px 32px #0008; }
+#owner-picker h3 { font-size: 16px; font-weight: 700; }
+#owner-picker label, .owner-dialog label { display: block; font-size: 13px; }
+#owner-picker input, #owner-search { display: block; width: 100%; margin-top: 5px; min-height: 44px; padding: 9px; border: 1px solid #64748b; border-radius: 8px; color: #fff; background: #0f172a; }
+.picking-pin #map { cursor: crosshair; }
+.picking-pin .custom-pin, .picking-pin .event-cluster { pointer-events: none !important; opacity: .35; }
+.picking-pin #map-toolbar, .picking-pin #map-navigation { visibility: hidden; }
+.owner-draft-pin { display: grid; place-items: center; background: #0284c7; border: 3px solid #fff; border-radius: 50%; color: #fff; box-shadow: 0 2px 12px #000b; font: 700 30px sans-serif; }
+.owner-dialog { width: min(900px,calc(100vw - 24px)); max-height: calc(100dvh - 32px); padding: 20px; border: 1px solid #475569; border-radius: 18px; background: #0f172a; color: #f1f5f9; overflow: auto; }
+.owner-dialog::backdrop { background: #020617cc; }
+.owner-dialog header { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.owner-dialog h3 { font-size: 19px; font-weight: 700; }
+.owner-dialog p { margin: 12px 0; line-height: 1.6; font-size: 13px; color: #cbd5e1; }
+#owner-card-state, #owner-picker-state, #owner-dialog-state { color: #fcd34d !important; overflow-wrap: anywhere; }
+#owner-candidates { max-height: 45dvh; overflow: auto; margin-top: 14px; }
+#owner-candidates button { display: block; width: 100%; text-align: left; margin: 7px 0; }
+#owner-candidates small { display: block; color: #b8c7d9; margin-top: 5px; }
+.owner-merge-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.owner-merge-card { min-width: 0; padding: 14px; border: 1px solid #475569; border-radius: 14px; background: #0b1222; overflow-wrap: anywhere; }
+.owner-merge-card:has(input:checked) { border-color: #38bdf8; background: #082f4966; }
+.owner-merge-card > span, .owner-confirm { display: flex !important; align-items: center; gap: 10px; min-height: 44px; margin-bottom: 12px; color: #e0f2fe; }
+.owner-dialog input[type=checkbox], .owner-dialog input[type=radio] { width: 20px; height: 20px; accent-color: #0ea5e9; flex-shrink: 0; }
+.owner-merge-card h4 { font-size: 15px; font-weight: 700; }
+.owner-merge-card a { color: #7dd3fc; text-decoration: underline; font-size: 12px; }
+.owner-merge-card li { margin: 7px 0; }
+.owner-description { white-space: pre-wrap; }
+.owner-confirm { margin-top: 16px; }
+@media(max-width:639px) { .owner-merge-grid { grid-template-columns: 1fr; } .owner-dialog { padding: 14px; } #owner-picker { bottom: calc(12px + env(safe-area-inset-bottom)); } }

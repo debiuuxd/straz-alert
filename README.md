@@ -29,6 +29,18 @@ Mapa zdarzeń z całej Polski. Powiadomienia lokalne mają osobny, wąski zasię
 
 Sekrety GitHuba: `SUPABASE_URL`, `SUPABASE_SERVICE_KEY` (ewentualnie dotychczasowy serwerowy `SUPABASE_KEY`), `GEMINI_API_KEY`. Klucz anonimowy nie jest zastępczym kluczem bota. Biblioteki przypięto w `requirements.lock.txt`.
 
+## Poprawianie pinezek i dubli
+
+Po zalogowaniu właściciel otwiera kartę zdarzenia. Na dole karty są opcje:
+
+- **Przesuń pinezkę**: kliknij mapę lub przeciągnij niebieski punkt, popraw nazwę miejsca i naciśnij „Zapisz położenie”. „Anuluj” nie zapisuje zmian. Punkt jest oznaczony jako wskazany ręcznie; kolejne aktualizacje bota go zachowują.
+- **Połącz duplikat**: wyszukaj drugi wpis po miejscu lub tytule (wyszukiwarka obejmuje wszystkie dni). Porównaj oba opisy i źródła, wybierz opis i położenie do zachowania, zaznacz potwierdzenie i wybierz „Połącz wpisy”. Źródła obu wpisów zostają razem. Drugi wpis i jego identyfikatory pozostają w bazie jako alias, dzięki czemu stary materiał nie tworzy nowej pinezki.
+- **Cofnij ostatnią poprawkę**: przywraca poprzedni punkt albo rozdziela wpisy. Dostępne dopóki żaden z objętych wpisów nie został później zmieniony. Cofnięcie nie nadpisuje nowszych danych.
+
+Migrację `database/owner-corrections.sql` stosuje się po `database/merged-incidents.sql`. Dodaje numer wersji wpisu, prywatny zapis poprawek i atomowe funkcje z kontrolą właściciela. Nie przyznaje przeglądarce bezpośredniego prawa UPDATE. Każdy zapis sprawdza wersję, żeby nie nadpisać równoległej aktualizacji. Bot odczytuje świeży wpis główny przed uzupełnieniem źródeł i ponawia po konflikcie wersji. Poprawki i cofnięcia nie uruchamiają ntfy; konfiguracja zasięgu pozostaje w `local-alert-area.json`.
+
+`tests/owner_corrections.sql` to osobny test integracyjny administratora: sprawdza rzeczywiste role i funkcje w transakcji zakończonej ROLLBACK, bez pozostawiania próbnych zdarzeń. Nie jest automatycznie uruchamiany przez CI.
+
 ## Lokalizacja i warunki usługi
 
 Bot zachowuje istniejące użycie Nominatim z trwałą pamięcią wyników, jednym zadaniem naraz i odstępem co najmniej 15,1 s pomiędzy nowymi zapytaniami. Nie ma automatycznego wyszukiwania adresów podczas pisania w formularzu. Alternatywny zgodny endpoint można ustawić przez `GEOCODER_URL` bez zmian kodu. Korzystanie musi pozostawać zgodne z [zasadami Nominatim](https://operations.osmfoundation.org/policies/nominatim/), w tym limitem dla cyklicznych zadań, oznaczeniem źródła i warunkami OSM. W razie większego ruchu należy zmienić dostawcę.

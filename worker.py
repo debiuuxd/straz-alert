@@ -308,6 +308,29 @@ def notify_once(incident, enabled=True):
             log(f"ntfy: wynik niepewny, bez automatycznej powtórki: {safe_source_error(exc)}")
 
 
+def enrich_existing(incident_id, incoming):
+    """Follow owner merges and retry against a fresh revision, never a stale cache."""
+    for _ in range(8):
+        rows = supabase.table('incidents').select('*').eq('id', incident_id).execute().data
+        if not rows:
+            raise ValueError('Wpis usunięty podczas aktualizacji')
+        current = rows[0]
+        if current.get('merged_into'):
+            incident_id = current['merged_into']
+            continue
+        patch = merge_incident(current, incoming)
+        try:
+            saved = supabase.table('incidents').update(patch).eq('id', incident_id).eq(
+                'edit_revision', current.get('edit_revision', 0)).is_('merged_into', 'null').execute().data
+        except Exception as exc:
+            if getattr(exc, 'code', None) == '40001':
+                continue
+            raise
+        if saved:
+            return saved[0]
+    raise ValueError('Wpis zmienia się podczas aktualizacji — ponowienie w kolejce')
+
+
 def process_queue(models, deadline):
     pending = supabase.table('feed_queue').select('*').eq('state', 'pending').lte(
         'next_attempt', now_utc().isoformat()).order('first_seen').limit(40).execute().data
@@ -335,10 +358,10 @@ def process_queue(models, deadline):
             incident = build_incident(item, data)
             old = find_duplicate(incident, recent)
             if old:
-                patch = merge_incident(old, incident)
-                supabase.table('incidents').update(patch).eq('id', old['id']).execute()
-                old.update(patch)
-                incident_id = old['id']
+                saved = enrich_existing(old['id'], incident)
+                recent = [row for row in recent if row['id'] not in (old['id'], saved['id'])]
+                recent.insert(0, saved)
+                incident_id = saved['id']
                 # Enriching a known event must never send a second alarm.
             else:
                 incident['alert_eligible'] = notification_eligible(incident, now_utc(), not payload['quiet'])
@@ -368,7 +391,7 @@ def process_manual(deadline):
         if point:
             patch = {'lat': point[0], 'lng': point[1], 'location_accuracy': 'town',
                      'local_alert': is_local_incident(row['title'], row['location'], row['region'], *point)}
-            supabase.table('incidents').update(patch).eq('id', row['id']).execute()
+            supabase.table('incidents').update(patch).eq('id', row['id']).eq('location_accuracy', 'unknown').execute()
     manual = supabase.table('incidents').select('*').is_('merged_into', 'null').like('external_id', 'manual-%').eq('notify_requested', True).gte(
         'created_at', (now_utc()-timedelta(hours=2)).isoformat()).execute().data
     for row in manual:
