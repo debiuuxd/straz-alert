@@ -7,7 +7,7 @@
   <meta name="theme-color" content="#090a0f">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
   <meta name="apple-mobile-web-app-title" content="Straż Alert">
   <link id="pwa-manifest" rel="manifest" href="">
   
@@ -55,7 +55,7 @@
     .filter-pill.active { background-color: #ef4444; color: #ffffff; border-color: #f87171; box-shadow: 0 4px 12px rgba(239, 68, 68, 0.35); }
   </style>
   <link rel="stylesheet" href="./vendor/markercluster/MarkerCluster.css">
-  <link rel="stylesheet" href="./map-ui.css?v=20261107-cluster2">
+  <link rel="stylesheet" href="./map-ui.css?v=20261108-safe1">
 </head>
 <body class="relative select-none">
 
@@ -87,9 +87,9 @@
   </div>
 
   <!-- GÓRNY PANEL -->
-  <div id="map-toolbar" style="z-index: 40;" class="fixed top-0 left-0 right-0 pointer-events-none flex flex-col bg-slate-950/95 pt-[env(safe-area-inset-top)]">
+  <div id="map-toolbar" style="z-index: 40;" class="fixed top-0 left-0 right-0 pointer-events-none flex flex-col">
     
-    <header class="min-h-[56px] py-1.5 backdrop-blur-md border-b border-slate-800/80 px-2.5 sm:px-4 flex items-center justify-between gap-2 pointer-events-auto shadow-lg">
+    <header class="min-h-[56px] py-1.5 border-b border-slate-800/80 px-2.5 sm:px-4 flex items-center justify-between gap-2 pointer-events-auto shadow-lg">
       <div id="map-brand" class="flex items-center gap-2 min-w-0 flex-1">
         <div class="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-gradient-to-br from-red-600 to-amber-600 flex items-center justify-center shadow-md shadow-red-600/30 border border-red-400/40 flex-shrink-0">
           <i data-lucide="flame" class="w-4 h-4 sm:w-5 sm:h-5 text-white"></i>
