@@ -104,9 +104,9 @@ def event_fields(data, source_text, published_at, now):
     evidence = data.get("date_evidence")
     if evidence_present(evidence, source_text):
         ev = normalize(evidence)
-        if "dzis" in ev and published_at:
+        if re.search(r'\b(?:dzis|dzisiaj|dzisiejsz\w*)\b', ev) and published_at:
             event_date = published_at.astimezone(WARSAW).date()
-        elif "wczoraj" in ev and published_at:
+        elif re.search(r'\bwczoraj\w*\b', ev) and published_at:
             event_date = published_at.astimezone(WARSAW).date() - timedelta(days=1)
         else:
             value = str(data.get("event_date") or "")
@@ -118,8 +118,29 @@ def event_fields(data, source_text, published_at, now):
                     forms.append(candidate.strftime("%d.%m"))
                 if any(form in str(evidence) for form in forms):
                     event_date = candidate
+                # Written Polish dates must be present in the cited fragment,
+                # with the same day/month/year (not merely a date supplied by AI).
+                months=['stycznia','lutego','marca','kwietnia','maja','czerwca',
+                        'lipca','sierpnia','wrzesnia','pazdziernika','listopada','grudnia']
+                match=re.search(r'\b(\d{1,2})\s+('+ '|'.join(months) +r')(?:\s+(20\d{2}))?\b',ev)
+                if match and (int(match[1]),months.index(match[2])+1)==(candidate.day,candidate.month):
+                    reference=published_at.astimezone(WARSAW).date() if published_at else now.astimezone(WARSAW).date()
+                    year=int(match[3]) if match[3] else reference.year-(candidate.month>reference.month)
+                    if candidate.year==year:
+                        event_date=candidate
             except ValueError:
                 pass
+            if event_date is None and published_at:
+                weekdays=[r'poniedzial\w*',r'wtork\w*|wtorek',r'srod\w*',r'czwart\w*',r'piatk\w*|piatek',r'sobot\w*',r'niedziel\w*']
+                found=[day for day,pattern in enumerate(weekdays) if re.search(r'\b(?:'+pattern+r')\b',ev)]
+                if len(found)==1:
+                    reference=published_at.astimezone(WARSAW).date()
+                    delta=(reference.weekday()-found[0])%7
+                    if delta==0 and re.search(r'ubiegl|zeszl|poprzedni',ev):
+                        delta=7
+                    # Past-tense weekday references only; future dates are not incidents.
+                    if not re.search(r'przyszl|najblizsz|nadchodz',ev):
+                        event_date=reference-timedelta(days=delta)
     if event_date and not now.astimezone(WARSAW).date() - timedelta(days=7) <= event_date <= now.astimezone(WARSAW).date():
         event_date = None
     value = str(data.get("event_time") or "")
@@ -154,6 +175,78 @@ def _event_kind(row):
     if re.search(r'wypad|zderz|koliz|dachow|potrac', text):
         return 'traffic'
     return ''
+
+
+def matching_candidates(payload, recent, limit=6):
+    """Shortlist by a mentioned town and a seven-day window, never by GPS alone."""
+    text=normalize(payload.get('title','')+' '+payload.get('summary',''))
+    published=parse_timestamp(payload.get('published_at'))
+    generic={'pod','okolice','okolicy','powiat','powiecie','wojewodztwo','wojewodztwie',
+             'nieustalona','miejscowosc','polska','stary','stare','nowy','nowa','nowe','gorny','dolny'}
+    selected=[]
+    for row in recent:
+        if row.get('merged_into') or str(row.get('external_id','')).startswith('manual-'):
+            continue
+        other=parse_timestamp(row.get('published_at') or row.get('created_at'))
+        if published and other and abs(published-other)>timedelta(days=7):
+            continue
+        place=normalize(row.get('location','')).split(',')[0]
+        words=[w for w in re.findall(r'[a-z]+',place) if len(w)>=4 and w not in generic]
+        if not words or not all(re.search(r'\b'+re.escape(w[:4])+r'\w*\b',text) for w in words):
+            continue
+        overlap=len(_title_tokens(text)&_title_tokens(row.get('title','')+' '+row.get('description','')))
+        selected.append((overlap,row))
+    selected.sort(key=lambda pair:(-pair[0],int(pair[1]['id'])))
+    return [row for _,row in selected[:limit]]
+
+
+def confirmed_duplicate(data, new, candidates, source_text):
+    """Accept only a shortlisted ID with two real source quotations and no conflicts."""
+    match=data.get('duplicate')
+    if not isinstance(match,dict) or match.get('confidence')!='high' or match.get('same_event') is not True:
+        return None
+    try:
+        target=int(match.get('incident_id'))
+    except (ValueError,TypeError):
+        return None
+    old=next((row for row in candidates if int(row['id'])==target),None)
+    if old is None:
+        return None
+    if not matching_candidates({'title':new.get('location',''),'published_at':new.get('published_at')},[old]):
+        return None
+    quotes=[str(match.get(key) or '') for key in ('new_evidence','old_evidence')]
+    if any(len(normalize(quote))<24 or len(quote)>600 for quote in quotes):
+        return None
+    if not evidence_present(quotes[0],source_text) or not evidence_present(quotes[1],old.get('_source_text','')):
+        return None
+    if new.get('event_date') and old.get('event_date') and new['event_date']!=old['event_date']:
+        return None
+    old_seen=parse_timestamp(old.get('published_at') or old.get('created_at'))
+    if new.get('event_date') and old_seen and new['event_date']>old_seen.astimezone(WARSAW).date().isoformat():
+        # An earlier report cannot describe a physical event happening tomorrow.
+        return None
+    if new.get('event_time') and old.get('event_time') and new['event_time']!=old['event_time']:
+        return None
+    points=[coordinates(row.get('lat'),row.get('lng')) for row in (new,old)]
+    if all(points) and math.hypot((points[0][0]-points[1][0])*111,(points[0][1]-points[1][1])*70)>15:
+        return None
+    specific=r'\b(?:ulica|ulicy|ul|aleja|alei|al|rynek|rynku|plac|pl|rondo|wezel)\b|\b(?:a|s|dk|dw)\s?\d+\b'
+    if all(re.search(specific,normalize(row.get('location'))) for row in (new,old)) and not _same_specific_location(new,old):
+        return None
+    new_kind=_event_kind(new);old_kind=_event_kind(old)
+    if new_kind and old_kind and new_kind!=old_kind:
+        return None
+    # A city and a generic word such as 'fire' cannot justify a merge. Require
+    # a shared contextual detail in source quotations, in addition to AI's decision.
+    generic={'pozar','fire','shoot','wypad','zdarz','doszl','doszo','zosta','ktory','ktora','ktore',
+             'przez','jeden','jedna','jedno','podcz','miejs','straz','akcja','dzial','centr','trwa','trwal',
+             'ranny','ranni','zamac','strza','wynik','dom','domu','budyn','samoc','pojaz','ratow','sluzb',
+             'pomoc','poszk','polsk','sobot','wtork','ponie','czwar','piatk','srod','niedz'}
+    place=_title_tokens(new.get('location',''))|_title_tokens(old.get('location',''))
+    detail=(_title_tokens(quotes[0])&_title_tokens(quotes[1]))-place-generic
+    if not detail:
+        return None
+    return old
 
 
 def _title_tokens(text):
@@ -270,6 +363,7 @@ def merge_incident(old, new):
     for field in ("event_date", "event_time"):
         if not old.get(field) and new.get(field):
             patch[field] = new[field]
+            patch['date_str' if field=='event_date' else 'time_str']=new[field]
     # A report of an action in progress must never reopen a completed incident.
     observed = parse_timestamp(new.get("status_observed_at"))
     previous = parse_timestamp(old.get("status_observed_at"))
